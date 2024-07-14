@@ -193,3 +193,152 @@ use ``` kubectl help ``` for more info.
 
 ## Pods
 
+### Pods in Kubernetes
+
+A Pod is a collection of application containers and volumes running in the same execution environment.
+It is the smallest deployable artifact in a k8s cluster.
+
+### Thinking with Pods
+
+What should I put in a POD ?
+
+* WordPress container + MySQL database container = WordPress instance. This kind of pod is actually an antipattern for pod construction.
+* the scaling startegy for both them are different and won't fit for eachother
+
+Ask will these contaners work correctly if they land on different machines ? if the answer is no . The pod is the correct grouping fo the containers. 
+If answer is yes, Using multiple pods is probably the correct solution.
+
+### Creating a POD
+
+* simplest way to create a pod with ``` kubectl run ```
+
+``` shell
+kubectl run kuard --generator=run-pod/v1 --image=gcr.io/kuar-demo/kuard-amd64:blue 
+```
+
+* see the node running
+
+``` shell
+kubectl get pods
+```
+* delete the node
+
+``` shell
+kubectl delete pods/kuard
+```
+
+### Creating Pod Manifest
+
+* Can be created using YAML or JSON. But YAML is generally preferred since it's slightly more human-editable and support comments.
+* It should be treated as the same way as source code.
+
+``` yaml
+# for creating kurad-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+name: kuard
+spec:
+containers:
+- image: gcr.io/kuar-demo/kuard-amd64:blue
+name: kuard
+ports:
+- containerPort: 8080
+name: http
+protocol: TCP
+```
+
+* Written recode of desired state is the best practice in the long run, especially for large teams with many applications.
+
+### Running  Pods
+
+* use `kubectl  apply` apply command to launch a single instance of kurd
+
+``` shell
+kubectl apply -f kurad-pod.yaml
+```
+
+##### How it works
+
+1. The pod manifest will be submitted to the kubernetes API Server. 
+2. The k8s system will then schedule that pod to run on a healthy node in the cluster, `kubelet` daemon will monitor it.
+
+### Listing Pods
+
+    kubectl get pods
+
+### Pod Details
+
+    kubectl describe pods kuard
+
+* To get more details on pod
+It contains 
+basic information
+![alt text](Images/describe_1.png)
+Containers running in the pod
+![alt text](Images/describe_2.png)
+events related to the pod.
+![alt text](Images/describe_3.png)
+
+### Deleting a POD
+
+* Delete either by name
+    kubectl delete pods/kuard
+* Or can use the same file to delete
+    kubectl delete -f kuard-pod.yaml
+
+* When you delete a pod it won't immediately killed. It has a termination grace period of 30 seconds. When pod is in that state it no longer receives new requests. This grace period is important for reliability becuase it allows the pods to finish any active requests that it may be in the middle of processing before it is terminated.
+
+* when you delete a pod the data stored also gets deleted. If you want to persist data across mulitple instances of a pod, we need persistent Volumes
+
+### Accessing Your POD
+
+For various reasons including not limited too..
+
+* Want to load the web service running in the pod
+* To see logs to debug a problem
+* To execute other commands inside the Pod to help debug
+
+##### Getting more Information with Logs
+
+* To understand what the application doing
+``` shell
+    kubectl logs kuard # download the current logs
+    # -f flag to stream
+    # --previous flag to get logs from previous instance of the container
+```
+
+* While it's useful for occasional debugging of containers in prodcution env, it's generally useful to use log aggregation service.
+
+##### Running Commands in your Container with exec
+
+``` shell
+kubectl exec kuard -- date # to run a command
+
+# -t flag for interactive session
+
+kubectl exec -it kuard -- ash
+
+```
+
+#### Copying Files to and from containers
+
+* Copying files from one container to another is antipattern. We should treat the contenct of a container as immutable.
+
+* But sometimes it's the most immediate way to stop the bleeding and restore the service to health. since it is quicker than building, pushing, and rolling out a new image.
+
+* But when you stop bleeding it is critically important that you immediately go and do the image build and rollout. Otherwise the local changes is made to the container is forgotten and overwritten by next rollout.
+
+### Health Checks
+
+* When we run a application as container in k8s it keep it alive by using a process `health check`. It checks the process is running or not. else it's restarts everything.
+
+* But it's insuffieciet for deadlocks and all. since health check things that application is still running.
+
+* To address this k8s introduced health checks for application `liveness`.
+
+* It applies application specific logic, like loading a web page. Since it's application specific, we have to define them in pod manifest
+
+##### Liveness Probe
+
+
