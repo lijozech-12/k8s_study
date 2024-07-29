@@ -1,0 +1,886 @@
+k8s
+
+kubelte the captain in boat(worker nodes)
+kube-apiserver 
+kube-controller-manger
+
+control the pods and it's issues and get it back if there is any issues.x
+
+kube-scheduler. it filters nodes and and schedule which helps to define which container to be given to which pod
+
+kube-proxy: looks for services
+
+pod smallest cluster
+
+pod can have a helper container. but normally only one pod  
+
+pod-definition.yml
+
+apiVersion: v1
+kind: Pod #type of object we are trying creating #case sensitive
+metadata: #data about the api #dict
+	name: myapp-pod #string value
+	labels: #dict
+		app: myapp
+		type: front-end
+spec: #dict
+	containers:
+	- name: nginx-container
+	  image: nginx
+	- name: busybox
+	  image: busybox  #only one container is enough
+	  
+kubectl create -f pod-definition.yml #to create the container
+  
+kubectl get pods  # to retreive the name of container
+
+kubectl describe pod myapp-pod  # to get details of a pod
+
+kubectl apply -f pod-definition.yml
+
+#simplest way to create image 
+kubectl run nginx --image=nginx
+
+#to see the deatails
+kubectl get pods -o wide
+
+# to create a yaml definition file easily
+
+kubectl run redis --image=redis123 --dry-run=client -o yaml > redis.yaml
+
+
+ReplicaSets
+ensure the specified number of pods exists
+it can span accross different node
+replication controller and replica set are similar but not same replication controller is replaced by replica set
+
+#replciation controller
+rc-defintion.yml
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+	name: myapp-rc
+	labels:
+		app: myapp
+		type: frontend
+spec:
+	template:
+		metadata: #data about the api #dict
+			name: myapp-pod #string value
+			labels: #dict
+				app: myapp
+				type: front-end
+		spec: #dict
+			containers:
+			- name: nginx-container
+		  	  image: nginx
+			- name: busybox
+		  	  image: busybox  #only one container is enough
+	replicas: 3
+	
+	
+kubectl get replicationcontroller
+
+
+Replicaset
+replcaset have selector it can add containers which is not part of this  using selectors
+it can used to monitor the current containers
+
+apiVersion: apps/v1
+kind: ReplicationController
+metadata:
+	name: myapp-rc
+	labels:
+		app: myapp
+		type: frontend
+spec:
+	template:
+		metadata: #data about the api #dict
+			name: myapp-pod #string value
+			labels: #dict
+				app: myapp
+				type: front-end
+		spec: #dict
+			containers:
+			- name: nginx-container
+		  	  image: nginx
+			- name: busybox
+		  	  image: busybox  #only one container is enough
+	replicas: 3
+	selector:
+		matchLabels:
+			type: front-end
+			
+			
+Labels and Selectors
+
+#to scale the replication
+
+
+kubectl scale --replicas=6 -f repicasset-defintion.yml
+kubectl scale --replicas=6 replicaset myapp-replicaset
+
+# to delete replicaset
+kubectl delete replicaset myapp-replicaset
+
+#to update the replicaset
+
+kubectl replace -f replicaset-definition.yml
+
+kubectl describe replicaset <name of replicaset>
+
+short form replicaset is rs
+
+kubectl edit rs <replicaset name> #to edit the replicasets
+kubectl scale rs new-replica-set --replicas=5 #to scaling the replicasets 
+
+
+#Deployments
+similar to rs
+kubectl get deploy
+kubectl get all # to get everything
+
+kubectl create deployment #it will have the 
+
+#services
+
+kubectl describel svc kubernetes
+
+to communicate with other like networks
+gives lose coupling between them
+service ip's
+
+nodeport = ip for node
+ 
+ apiVersion: v1
+ kind: Service
+ metadata:
+ 	name: myapp-service
+ 
+ spec:
+ 	type: NodePort
+ 	ports:
+ 	- targetPort: 80
+ 	  port: 80
+ 	  nodePort: 30008
+ 	- selector:
+ 	  	app: myapp
+ 	  	type: front-end
+ 	  	
+clusterip #grouped interface for services.
+
+ip for cluster. like frontend, backend and redis
+
+3. service port
+
+Namespaces
+
+like names int normal thing to access different thing in k8s. 
+it helps to define policies in differnt namespaces like dev, prod. and change according to that
+ex
+ mysql.connect("db-service.dev.svc.cluster.local")
+ 
+cluster.local = domain
+svc = service
+dev = Namespace
+db-service = Service Name
+
+#to get pods from different namespaces use
+
+kubectl get pods --namespace=kube-system
+
+# to create pods in different namespace use 
+kubectl create -f pod-definition.yml --namespace=dev
+
+#the below command will create the same in default namespace
+kubectl create -f pod-definition.yml 
+
+
+you can add
+
+kubectl create namespace <name of namspace>
+
+# to change the context of the namespace
+
+kubectl config set-context $(kubectl config current-context) --namespace=dev
+
+#if we run commands now we don't need to add --namespace=dev into that
+
+#to get name of all pods in the all the namespaces
+kubectl get pods --all-namespaces
+
+
+# to defint quota for a namespace that's a virtual limit of resources can be used by a namespcae
+# the below thing create quota for 
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+	name: compute-quota
+	namespace: dev
+spec:
+	hard:
+		pods: "10"
+		requests.cp: "4"
+		requests.memory: 5Gi
+		limits.cpu: "10"
+		limits.memory: 10Gi
+		
+		
+kubectl get namespaces -A
+
+
+Imperavtive and declarative
+impreavtive = all the commands line by line
+declarative = only one command like run nginx
+ 
+ 
+ imperative commands
+ #create objects
+  - kubectl run --image=nginx nginx
+  - kubectl create deployment --image=nginx nginx
+  - kubectl expose deployment nginx --port 80
+  
+  #update objects
+  - kubectl edit deployment nginx
+  - kubectl scale deployment nginx --replicas=5
+  - kubectl set image deployment nginx nginx=nginx:1.18
+  
+  imperative object configuration files
+  
+  create objects
+  - kubectl create -f nginx.yaml
+  
+  update objects
+  - kubectl edit deployment nginx. # we can edit the configuration but it won't reflected in the the edit
+  - kubectl replace -f nginx.yaml
+  - kubectl replace --force -f nginx.yaml
+  
+  imperative approach is taxating
+  
+  Declarative
+  
+  create objects
+  - kubectl apply -f nginx.yaml
+  - kubectl apply -f /path/to/config-file
+  
+  
+  
+ Certification Tips - Imperative Commands with Kubectl
+While you would be working mostly the declarative way - using definition files, imperative commands can help in getting one time tasks done quickly, as well as generate a definition template easily. This would help save considerable amount of time during your exams.
+
+Before we begin, familiarize with the two options that can come in handy while working with the below commands:
+
+--dry-run: By default as soon as the command is run, the resource will be created. If you simply want to test your command , use the --dry-run=client option. This will not create the resource, instead, tell you whether the resource can be created and if your command is right.
+
+-o yaml: This will output the resource definition in YAML format on screen.
+
+
+
+Use the above two in combination to generate a resource definition file quickly, that you can then modify and create resources as required, instead of creating the files from scratch.
+
+
+
+POD
+Create an NGINX Pod
+
+- kubectl run nginx --image=nginx
+
+
+
+Generate POD Manifest YAML file (-o yaml). Don't create it(--dry-run)
+
+- kubectl run nginx --image=nginx --dry-run=client -o yaml
+
+
+
+Deployment
+Create a deployment
+
+- kubectl create deployment --image=nginx nginx
+
+
+
+Generate Deployment YAML file (-o yaml). Don't create it(--dry-run)
+
+- kubectl create deployment --image=nginx nginx --dry-run=client -o yaml
+
+
+
+Generate Deployment with 4 Replicas
+
+- kubectl create deployment nginx --image=nginx --replicas=4
+
+
+
+You can also scale a deployment using the kubectl scale command.
+
+- kubectl scale deployment nginx --replicas=4
+
+Another way to do this is to save the YAML definition to a file and modify
+
+-kubectl create deployment nginx --image=nginx --dry-run=client -o yaml > nginx-deployment.yaml
+
+
+
+You can then update the YAML file with the replicas or any other field before creating the deployment.
+
+
+
+Service
+Create a Service named redis-service of type ClusterIP to expose pod redis on port 6379
+
+-kubectl expose pod redis --port=6379 --name redis-service --dry-run=client -o yaml
+
+(This will automatically use the pod's labels as selectors)
+
+Or
+
+kubectl create service clusterip redis --tcp=6379:6379 --dry-run=client -o yaml (This will not use the pods labels as selectors, instead it will assume selectors as app=redis. You cannot pass in selectors as an option. So it does not work very well if your pod has a different label set. So generate the file and modify the selectors before creating the service)
+
+
+
+Create a Service named nginx of type NodePort to expose pod nginx's port 80 on port 30080 on the nodes:
+
+- kubectl expose pod nginx --type=NodePort --port=80 --name=nginx-service --dry-run=client -o yaml
+
+(This will automatically use the pod's labels as selectors, but you cannot specify the node port. You have to generate a definition file and then add the node port in manually before creating the service with the pod.)
+
+Or
+
+kubectl create service nodeport nginx --tcp=80:80 --node-port=30080 --dry-run=client -o yaml
+
+(This will not use the pods labels as selectors)
+
+Both the above commands have their own challenges. While one of it cannot accept a selector the other cannot accept a node port. I would recommend going with the kubectl expose command. If you need to specify a node port, generate a definition file using the same command and manually input the nodeport before creating the service.
+
+
+paratice test for imperative commands
+
+to deploy pod named nginx-pod
+- kubectl run nginx-pod --image=nginx:alpine
+
+-kubectl run redis --image   
+  
+  
+  kubectl expose redis --port 6379 --name redis-service
+  
+  kubectl create deployment webapp image=<name> --replicas=3 
+  
+  to create deployments
+  
+  kubectl run custom-nginx --image=nginx --port=8080
+  
+  kubectl create namespace dev-ns
+  
+  kubectl create deployment redis-deploy --image=redi --replicas=2 -n dev-ns
+  
+  -n = namespace
+  
+  kubectl run httpd --image=httpd:alpine --port=8080m expose=true
+  
+  
+  kubectl apply
+  
+  how to it work internally 
+  
+  if the object is don't exist it will create it for. they will create something like yaml inside k8s and save it with values.
+  the values would be removed from local files
+  
+  # Scheduling
+  ##manuval schedling
+  
+  mimicing the the working of scheduler in the nodes
+  
+  Pod-bind-definition.yaml
+  
+  apiVersion: v1
+  kind: Binding
+  metadata:
+  	name: nginx
+  target:
+  	apiVersion: v1
+  	kind: Node
+  	name: node02
+  	
+ it will help 
+   
+ 1. kubectl create -f nginx.yaml
+ 3. kubectl describe pod nginx
+ 	kubectl get pods -n kube-system
+ 	
+add nodeName property for manuvally scheduling
+
+apiVersion: v1
+kind: Pod
+metadata:
+	name: nginx
+spec:
+	nodeName:
+	containers: node01
+	-image: nginx
+	  name: nginx
+	  
+	  
+	  
+kubectl replace --force -f nginx.yaml
+kubectl get pods --watch
+
+kubectl get pods -o wide # to get more details
+
+labels and selectors:
+it will help them to sort or group thing and filter them easily. like color of animals or mammals .
+
+labels added belwo metadata like
+metadata:
+	labels:
+		app: webapp
+		function: Front-end
+		
+		
+		
+Run withoug headers and count then count the numbers
+
+--kubectl get pods --selector env=dev --no-headers | wc -l
+
+# Taints and tolerations
+
+taint and toleration to that particulat taint
+
+like nodes have taint and toleration of pods
+taint are the restriction for a node
+taint is only for nodes and toleration is only for pods
+
+- kubectl taint nodes node-name key=value:taint-effect
+
+3 types of taint-effects 
+
+# NoSchedule
+# PreferNoSchedule
+# NoExecute
+
+-kubectl taint nodes node1 app=blue:NoSchedule
+
+
+tolerations
+
+add this to spec
+
+tolerations:
+	-key: "app"
+	 operator: "Equal"
+	 value: "blue"
+	 effect: "NoSchedule"
+	 
+kubectl taint node node01 spray=mortein:NoSchedule
+kubectl run mosquito --image=nginx
+
+kubectl run bee --image=nginx --dry-run=client -o yaml > bee.yaml
+and add toleration
+
+kubectl get pods -o pods
+
+# to remove taint
+
+kubectl taint node controlplane <copied taint>- to delete it
+
+#Node selector:
+
+place node with the help of labels
+
+spec
+	nodeSelector:
+		size: Large
+
+# Node affinity
+to ensure pods are placed in a specific nodes
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd            
+  containers:
+  - name: nginx
+    image: nginx
+    imagePullPolicy: IfNotPresent	
+    
+Node affinity solution
+
+2 kubectl label node node01 color=blue
+
+kubectl create deployment blue --image=nginx --replicas=3
+
+kubectl describe node node01 | grep Taints to check where nodes can be placed
+
+kubectl edit deployment blue
+
+# Resource Requests
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: frontend
+spec:
+  containers:
+  - name: app
+    image: images.my-company.example/app:v4
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+  - name: log-aggregator
+    image: images.my-company.example/log-aggregator:v6
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+        
+out of memory error when memory is limit exceds certain values
+requests and no limits are the best paracticse
+
+
+#limit Range
+
+to limit the usage of cpu and memory
+
+
+# resource-quota.yaml
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: cpu-resource-constraint
+spec:
+  limits:
+  - default: # this section defines default limits
+      cpu: 500m
+    defaultRequest: # this section defines default requests
+      cpu: 500m
+    max: # max and min define the limit range
+      cpu: "1"
+    min:
+      cpu: 100m
+    type: Container
+
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mem-limit-range
+spec:
+  limits:
+  - default:
+      memory: 512Mi
+    defaultRequest:
+      memory: 256Mi
+    type: Container
+    
+ 
+
+it is create on namespace level to give quota for each resourceses
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+	name: my-resource-quota
+spec:
+	hard:
+		requests.cpu: 4
+		requests.memory: 4Gi
+		limits.cpu: 10
+		limits.memory: 10Gi
+		
+
+if you want to change things in pod. someof them don't work
+
+so use
+# kubectl edit pod <pod name>
+
+kubectl replace --force <tmp file create by the previous edit>
+
+--------------
+Daemon Sets
+---------------
+
+it is like replica sets but it's copy will be there in all the nodes
+best for monitoring solution and logger
+
+kubeproxy and weave-net can be deployed
+
+
+there is no dry-run for daemon sets so use deployment commands for daemonsets
+
+kubectl create deployment elasticsearch -n kube-system --image= < better image>
+
+
+---------
+Static Pods
+--------
+
+we can pass manifest path 
+kubelet.service
+used for making multiple master nodes. like etcd.yaml, manager.yaml, controller-apiserver.yaml
+
+kubectl get pod kube-apiserveer-controlplane -n kube-system -o yaml
+
+kubectl get nodes -o yaml
+
+ls /var/lib/kubelet/config.yaml
+
+
+-----
+multiple scheduler
+---------
+
+multiple scheduler pods
+
+
+------
+monitoring cluster componets
+-----
+
+metrics server - in-memory solution
+
+------
+kubectl logs
+------
+
+kubectl logs -f <pod name>
+
+
+
+--------------
+Rolling Update
+------------------
+
+k get pod
+k get deploy
+ 
+ 
+ 
+ kubectl edit deploy frontend  #to edit the deployment
+ # to change to new image or 
+ kubect set image deployment frontend simple-webapp=<image name> to edit the deployement
+ 
+ ------------
+ Configure Applications
+ ------------------------
+ 
+ 
+ --------------
+ Application commands
+ ------------------
+ 
+ docker ps 
+ docker ps -a
+ 
+ 
+ we can give commands to run
+ 
+ like if we specify the below in the dockerfile
+ 
+ FROM Ubuntu
+ ENTRYPOINT ["sleep"] and then run docker run ubuntu-sleeper 10
+ 
+ FROM Ubuntu
+ ENTRYPOINT ["sleep"]
+ CMD ["5"]
+ 
+ 
+ apiVersion: v1
+ Kind: Pod
+ metadata:
+ 	name: ubuntu-sleeper-pod
+ spec:
+ 
+ 
+ # to add command --color green
+ 
+ 
+ kubectl run webapp-green --image=<imagename> -- --color green  
+ 
+ 
+ ------
+ environment
+ ------
+ 
+ #normal way
+ env:
+    - name: APP_COLOR
+       value: pink
+
+#using configmaps
+env:
+   - name: APP_COLOR
+      valueFrom:
+          configMapKeyRef:
+       
+ # Secret key
+ 
+ env:
+  - name: app_color
+     valueFrom:
+        secretKeyRef:
+        
+        
+ configmaps for environment
+ 
+ kubectl create configmap   #imperative
+ <config-name> --from-literal=<key>=<value>
+ 
+ 
+ 
+ kubectl create configmap \
+ 	app-config --from-literal=app_color=blue \
+ 			   --from-literal=app_mod=prod
+ 			   
+ kubectl create configmap
+ 	<config-name> --from-file=<path-to-file>
+
+kubectl create config map \
+         app-config --from-file=app_config.properties
+ 
+ config-map.yaml
+ 
+ apiVersion: v1
+ kind: ConfigMap
+ metadata:
+ 	name: app-config
+ data:
+ 	APP_COLOR: blue
+ 	APP_MODE: prod
+
+
+# you need to name the configmaps appropriately
+
+# to get configmaps
+
+kubectl get configmaps
+ 
+kubectl create -f config-map.yaml
+ 
+ 
+ app_color: blue
+ app_mode: prod
+ 
+ 
+ 
+ kubectl replace --force -f <tmp filename> #to delete the existing pod and create the new one
+ 
+ 
+ ----------------------
+ Creating secrets
+ ------------------
+ 
+ 
+ echo -n "value" | base64 --decode
+ echo -n "root" | base64
+ 
+ 
+ you can add secrets as env, single env and volumes
+ 
+ 
+ envFrom:
+ - secretRef:
+      name: secret 
+      
+      
+      
+kubectl logs pods < podname> <contaier name>
+
+
+---------------
+OS Upgrades
+-----------------
+
+# schedule the nodes into another node and make the nodes unschedulable. so that it can be upgraded or other things
+
+kubectl drain node-1
+
+# make the node unschedulable. but doesn't remove the pods
+
+kubectl cordon node-2
+
+# make the nodes schedulable
+
+kubectl uncordon node-1
+
+kubelet update
+-------------------
+kubectl get nodes
+apt-get upgrade -y kubelet=1.12.0-00
+systemctl restart kubelet
+
+
+Kubeadm upgrade
+
+kubectl drain node-1
+apt-get upgrade -y kubeadm=<version>
+apt-get upgrade -y kubelet=<version>
+kubeadm upgrade node --kubelet-version <new version you updated in the previous step>
+systemctl restart kubelet
+kubectl uncordon node-1
+
+timestamp with time zone
+
+alter table deviceownership add registered_on timestamp with time zone;
+
+cluster upgrade
+-------
+
+kubeadm upgrade plan
+to know what are the upgradeable process or versions available
+
+
+------------
+to backup and save all the configurations in k8s cluster
+-------------
+
+kubectl get all --all-namespaces -o yaml > all-deploy-services.yaml
+
+etcd
+
+we can backup using etcd. a
+
+we can save snapshots in it
+
+etcdctl snapshot save -h and keep a note of the mandatory global options.
+
+
+---------------
+Backup and Restore Methods
+-------------------
+
+kubectl get all --all-namespaces -o yaml > all-deploy-services.yaml
+
+there is tools that can use the same
+to store deployments
+
+ETCD cluster
+
+etcdctl snapshot save snapshot.db
+# to create a snap shot
+
+#to save a snapshot
+snapshot status snapshot.db
+
+
+

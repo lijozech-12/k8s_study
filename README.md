@@ -341,4 +341,110 @@ kubectl exec -it kuard -- ash
 
 ##### Liveness Probe
 
+* To check a process is up and running and just not restarted. It defined per container
+[example for liveness probe](https://github.com/lijozech-12/k8s_study/blob/main/pod-definition-files/kuard-pod-health.yaml
+)
 
+``` yaml
+livenessProbe:
+    httpGet:
+        path: /healthy
+        port: 8080
+    initialDelaySeconds: 5
+    timeoutSeconds: 1
+    periodSeconds: 10
+    failureThreshold: 3
+```
+
+* Pod manifest uses an httpGet probe to perform an HTTP GET request against the /healthy endpoint on port 8080 of the kuard container.
+* initialDelaySeconds = 5, it meand it won't be called until 5 seconds after all the containers in the pod are created.
+* The probe must be respond within the 1-second timeout.
+* The HTTP status code must be `200 < status code < 400 ` to consider it successful.
+* K8s will call the probe every 10 sec. (periodSeconds).
+* If probes fails more than 3 consecutive times, the container will fail and restart (failureThreshold).
+
+Run the below commands to check it.
+
+``` bash
+kubectl apply -f kuard-pod-health.yaml
+
+kubectl port-forward kuard 8080:8080
+
+# it will give more details.
+kubectl describe pods kuard
+```
+
+* There is 3 options for the restart policy
+1. Always(the default)
+2. OnFailure(restart only on liveness failure or nonzero process exit code)
+3. Never
+
+##### Readiness Probe
+
+* Readiness means the container is ready to server user requests.
+* Liveness checks if and application is running properly.
+* Containers that fails readiness checks are removed from sevice load balancers.
+
+##### Startup Probe
+
+* Introduced k8s recently as an alternative way of managing slow-starting containers.
+* When pod is started, the startup probe is run before any other probing of the pod is started.
+* It proceeds until it either times out(in which case pod is restarted) or it succeeds, at which time the livness probes takes over.
+* It enable you to poll slowly for a slow-starting container while also enabling a responsive liveness check once the slow-starting container has initilized.
+
+##### Advanced Probe Configuration.
+
+Probes in k8s have a number of advanced options, including
+* How long to wait after pod startup to start probing
+* How many failures should be considered a true failure
+* How many successes are necessary to reset the failure count.
+All of these configurations gets default values. But it is necessary for more advanced use cases such as pallication that are flaky or take long time to startup.
+
+##### Other Types of Health Checks.
+
+* It also supports tcpSocker health checks that open a TCP socker. If the connection succeds, the probe succeeds. 
+* It is useful for non-HTTP applications, such as databases or other non-HTTP-based APIs.
+* If the script return a zero exit code, the probe succeeds otherwise it fails.
+* It is more useful for custom application validation logic that doesn't fit neatly into an HTTP Call
+
+### Resource Management
+
+* People move into containers and orchestors like kubernetes because of the radical improvements in image packaing and reliable deployment they provide.
+* In addition to application-oriented primitives that simplify distributed system developement, equally important is that they allow you to increase the overall utilization of the compute nodes that make up the cluster.
+* since the basic cost of operating a machine is same if it's idle or working
+* Ensuring the machines are used maximally increase the effieciency of every dollar spent on infra.
+
+* Efficiency is measured with utilization metric. 
+* Utilization metric = Amount resource actively being used / Amount of a resource that has been purchased.
+* K8s can drive utilization greater than 50%.
+* To do that we need to tell k8s the resource the application requires so that k8s can find the optimal packing of containers onto machines.
+
+K8s allow users to specify 2 different metrics.
+
+* Resource requests = minimum amount of resource required to run the application
+* Resource limits = maximum amount of resource that an application can consume.
+
+##### Resource Requests: Minimum Required Resources.
+
+When a requests the resources required to run its containers, kubernets guarantees that resources are available to the Pod.
+The most commonly requested resources are CPU and memory. But it also supports GPUs.
+
+``` bash
+apiVersion: v1
+kind: Pod
+metadata:
+    name: kuard
+spec:
+    containers:
+    - image: gcr.io/kuar-demo/kuard-amd64:blue
+      name: kuard
+      resources:
+        requests:
+            cpu: "500m"
+                memory: "128Mi"
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+
+```
