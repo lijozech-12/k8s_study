@@ -424,27 +424,65 @@ K8s allow users to specify 2 different metrics.
 * Resource requests = minimum amount of resource required to run the application
 * Resource limits = maximum amount of resource that an application can consume.
 
-##### Resource Requests: Minimum Required Resources.
+#### Resource Requests: Minimum Required Resources.
 
 When a requests the resources required to run its containers, kubernets guarantees that resources are available to the Pod.
 The most commonly requested resources are CPU and memory. But it also supports GPUs.
 
-``` bash
+``` yaml
 apiVersion: v1
 kind: Pod
 metadata:
-    name: kuard
+  name: kuard
 spec:
-    containers:
+  containers:
     - image: gcr.io/kuar-demo/kuard-amd64:blue
       name: kuard
       resources:
         requests:
-            cpu: "500m"
-                memory: "128Mi"
-        ports:
+          cpu: "500m"
+          memory: "128Mi" #0.5 cpu and 
+      ports:
         - containerPort: 8080
           name: http
           protocol: TCP
 
 ```
+
+* Kubernetes scheduler will ensure that the sum of all requests of all pods on a node does not exceed the capacity of the node
+* Pod is guaranteed to have at least the requested resources when running on the node.
+* This only gives idea of minimum resources not the maximum resource.
+* If a second Pod with the same container and the same request of 0.5 CPU lands
+on the machine, then each Pod will receive 1.0 cores. If a third, identical Pod is
+scheduled, each Pod will receive 0.66 cores. Finally, if a fourth identical Pod is
+scheduled, each Pod will receive the 0.5 core it requested, and the node will be at
+capacity.
+
+* if the memory request is over OS can't just remove memory from the process, because it's been allocated. When system runs out of memory, the kubelet terminates containers whose memory usage is greater than their requested memory. The container is automatically restarted, but with less available memory on the machine for the container to consume.
+
+#### Capping Resource Usage with Limits
+
+* To set a maximum on a it's resource usage via resource limits
+
+``` yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kuard
+spec:
+  containers:
+    - image: gcr.io/kuar-demo/kuard-amd64:blue
+      name: kuard
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "128Mi"
+        limits:
+          cpu: "1000m"
+          memory: "256Mi"
+  ports:
+    - containerPort: 8080
+      name: http
+      protocol: TCP
+```
+* When we establisth limits on a container, the kernal is configured to ensure that consumption cannot exceed these limits.
