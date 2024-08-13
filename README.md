@@ -486,3 +486,312 @@ spec:
       protocol: TCP
 ```
 * When we establisth limits on a container, the kernal is configured to ensure that consumption cannot exceed these limits.
+
+
+### Persisting Data with Volumes.
+
+* Having access to persistent disk storage is an important part of a healthy application
+
+#### Using Volumes with Pods
+
+To add volume we need to add 2 stanzas to add to our configuration.
+* spec.volumes section. It defines all of the volumes that may be accessed by containers in the Pod manifest.
+
+* `volumeMounts` array in the container definition. This array defines the volumes that are mounted into a particular container and path where each volume should be mounted.
+
+``` bash
+#kuard-pod-vol.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kuard
+spec:
+  volumes: # adding volumes
+  - name: "kuard-data"
+    hostPath:
+      path: "/var/lib/kuard"
+  containers:
+    - image: gcr.io/kuar-demo/kuard-amd64:blue
+      name: kuard
+      volumeMounts: # Mounting data from container to volumn
+      - mountPath: "/data"
+        name: "kuard-data"
+      ports:
+      - containerPort: 8080
+        name: http
+      protocol: TCP
+
+```
+##### Different Ways of Using Volumes with Pods
+
+Following are the recommended pattern to use data in our application
+
+###### Communication/synchronization
+
+- two containers uses a shared volume to serve a site while keeping synchronized to a remote git location.
+* to achieve this use `emptyDir` volume. Scoped to pod's lifespan.
+
+###### Cache
+
+* Volume that is valuable for performance, but necessary for performance.
+* This will survive container restart due to health-check failures. 
+* `emptyDir` also works well with cache use case as well
+
+###### Persistent data
+
+* Data that is independent of the lifespan of a particulat Pod.
+* Should move b/w node in the cluster if a  node fails or a Pod move to a different machine.
+* K8s support wide variety of remot storage volumes. Amazon Elastic Block store, Azure File and Azure Disk and Google's Persistent Disk
+
+
+###### Mounting the host filesystem
+
+* Some application don't need persistent volume.
+* They need to access to the the /dev filesystem to perform raw block-level access to a device on the system.
+* K8s support `hostPath` volume. which can mount arbitrary locations on the worker node into container
+
+### Putting it together
+
+``` bash
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kuard
+spec:
+  volumes:
+    - name: "kuard-data"
+      nfs:
+        server: my.nfs.server.local
+        path: "/exports"
+  containers:
+    - image: gcr.io/kuar-demo/kuard-amd64:blue
+      name: kuard
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "128Mi"
+        limits:
+          cpu: "1000m"
+          memory: "256Mi"
+      volumeMounts:
+        - mountPath: "/data"
+          name: "kuard-data"
+      livenessProbe:
+        httpGet:
+          path: /healthy
+          port: 8080
+        initialDelaySeconds: 5
+        timeoutSeconds: 1
+        periodSeconds: 10
+        failureThreshold: 3
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080
+        initialDelaySeconds: 30
+        timeoutSeconds: 1
+        periodSeconds: 10
+        failureThreshold: 3
+
+```
+
+## 6 Labels and Annotations
+
+* We can organize, mark and cross-index all of your resources to represent the groups that make the most sense for your application.
+
+* Labels are key/value pairs that can be attached to k8s objects such as pods and replicasets. It is useful for attaching identifyin ginformtion to k8s object.
+
+* Annotations, on the other hand provide a storage mechanisum that resembles lables:key/value pairs designed to hold nonidentifyin information that tools and libraries can leverage. annotation are not meant for qureying, filtering, or otherwise differentiating pods from each other.
+
+### Labels
+
+* provides identifying metadat for objects
+* These are fundamental qualities of the object that will be usef for grouping, viewing and opertaing
+
+#### Applying Labels
+
+First, create the alpaca-prod deployment and set the ver, app, and env labels:
+
+```bash
+$ kubectl run alpaca-prod \
+--image=gcr.io/kuar-demo/kuard-amd64:blue \
+--replicas=2 \
+--labels="ver=1,app=alpaca,env=prod"
+```
+
+Next, create the alpaca-test deployment and set the ver, app, and env labels with
+the appropriate values:
+
+```bash
+$ kubectl run alpaca-test \
+--image=gcr.io/kuar-demo/kuard-amd64:green \
+--replicas=1 \
+--labels="ver=2,app=alpaca,env=test"
+```
+
+Finally, create two deployments for bandicoot. Here we name the environments prod
+and staging:
+
+```bash
+$ kubectl run bandicoot-prod \
+--image=gcr.io/kuar-demo/kuard-amd64:green \
+--replicas=2 \
+--labels="ver=2,app=bandicoot,env=prod"
+$ kubectl run bandicoot-staging \
+--image=gcr.io/kuar-demo/kuard-amd64:green \
+--replicas=1 \
+--labels="ver=2,app=bandicoot,env=staging"
+```
+
+At this point, you should have four deployments—alpaca-prod, alpaca-test,
+bandicoot-prod, and bandicoot-staging:
+
+```bash
+$ kubectl get deployments --show-labels
+NAME                      ... LABELS
+alpaca-prod               ... app=alpaca,env=prod,ver=1
+alpaca-test               ... app=alpaca,env=test,ver=2
+bandicoot-prod            ... app=bandicoot,env=prod,ver=2
+bandicoot-staging         ... app=bandicoot,env=staging,ver=2
+```
+
+![visulization of labels](<Images/Label and annotation/labels.png>)
+
+#### Modifying Labels
+
+* we can apply or update labels after we create them
+
+``` bash
+kubectl label deployments alpaca-test "canary=true"
+```
+
+* -L option to show a label value as a column
+
+```bash
+$ kubectl get deployments -L canary
+
+```
+* To remove label apply
+
+```bash
+kubectl label deployments alpaca-test "canary-"
+```
+
+#### Label Selectors
+
+* used to filter k8s object based on a set of labels
+
+```bash
+
+#returns labels with ver label set to 2
+
+kubectl get pods --selector="ver=2"
+
+# If two selectors separated by a comma, only the objects that satisfy both will be returned.
+
+kubectl get pods --selector="app=bandicoot,ver=2"
+
+# To select label is one of a set of values.
+
+kubectl get pods --selector="app in (alpaca,bandicoot)"
+
+## all the deployments with the canary label set
+
+kubectl get deployments --selector="canary"
+
+```
+
+![operator](<Images/Label and annotation/selector_operator.png>)
+
+#### Label Selectors in API Object
+
+```bash
+selector:
+  matchLabels:
+    app: alpaca
+  matchExpressions:
+    - {key: ver, operator: In, values: [1, 2]}
+```
+
+### Annotations
+
+* Provides additional metadata for kuberenets objects where the sole purpose of the metadata is assisting tools and libraries
+
+* labels are used to identify and group objects, annotations are used to provide extra information about where an object came from, how to use it, or policy around that object 
+
+* The primary usecase is being rolling deployments. During rolling deployments, annotations are used to track rollout status and provide the necessary information required to rollback a deployment to a previous state.
+
+Annotations are defined in the common metadata section in every Kubernetes object:
+
+```bash
+metadata:
+annotations:
+example.com/icon-url: "https://example.com/icon.png"
+```
+
+## 7 Service Discovery
+
+The dynamic nature of k8s makes it easy to run lot of things, it also creates problems when it comes to finding those things. Most of the traditional network infrastructure wasn't built for the level of dynamism that kubernetes presents
+
+The general name for this class of problems and solution is `service discovery`.
+
+* It helps to finding which processes are listening at which addresses for which services. Good service-discovery system will help to resolve this information quickly and reliably.
+
+* The `Domain Name System(DNS)` is the traditional system of service discovery on the interent
+
+### The Service Object
+
+* Service discover in k8s start with a `Service object`. A service object is a way to create a named label selector.
+
+* `kubectl expose` to create service. just as the `kubectl run` command.
+
+``` bash
+$ kubectl create deployment alpaca-prod \
+--image=gcr.io/kuar-demo/kuard-amd64:blue \
+--port=8080
+$ kubectl scale deployment alpaca-prod --replicas 3
+$ kubectl expose deployment alpaca-prod
+$ kubectl create deployment bandicoot-prod \
+--image=gcr.io/kuar-demo/kuard-amd64:green \
+--port=8080
+$ kubectl scale deployment bandicoot-prod --replicas 2
+kubectl expose deployment bandicoot-prod
+$ kubectl get services -o wide
+NAME              CLUSTER-IP    ... PORT(S)   ... SELECTOR
+alpaca-prod       10.115.245.13 ... 8080/TCP  ... app=alpaca
+bandicoot-prod    10.115.242.3  ... 8080/TCP  ... app=bandicoot
+kubernetes        10.115.240.1  ... 443/TCP   ... <none>
+```
+
+* 2 service created by us and 1 service created by k8s
+
+#### Service DNS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
