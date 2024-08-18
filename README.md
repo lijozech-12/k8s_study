@@ -772,10 +772,109 @@ kubernetes        10.115.240.1  ... 443/TCP   ... <none>
 
 #### Service DNS
 
+* Because the cluster IP is virtual it is table, and it is approriate to give it a DNS address. All of the issues around clients caching DNS results no longer apply
+* It is easy to connect to one of the pods identified by service
+* K8s provides a DNS service exposed to pods running in the cluster. This K8s DNS service was installed as a system component when the cluster was first created.
+
+#### Readiness Checks
+
+* Often, when an application first starts up, it isn't ready to hancel requests. There i usually some amount of initializtion that can take anywhere from under a second to several minutes.
+* One nice thing the service object does is track which of your pods are ready via a readinesss check.
+
+```bash
+kubectl edit deployment/alpaca-prod
+```
+* The above command will fetch the current version of alpaca-prod deployment and bring it up in an editor, it'll write the object back to k8s. Quick way to edit an objce without saving it to a YAML file
+
+```bash
+spec:
+  ...
+  template:
+    ...
+    spec:
+      containers:
+      ...
+      name: alpaca-prod
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080
+        periodSeconds: 2
+        initialDelaySeconds: 0
+        failureThreshold: 3
+        successThreshold: 1
+```
+
+* This will check readiness via an HTTP GET to /ready on port 8080
+* Done in every 2 seconds starting as soon as the Pod comes up
+* If 3 successive checks fil, then the Pod will be considered not ready.IF 1 check succeds, the Pod will again be considered ready.
+* Only ready pods are sent traffic.
+
+Updating the deployment definition like this will delete and re-create the `alpaca Pods`. We need to restart our `port-forward` command from earlier
+
+```bash
+$ ALPACA_POD=$(kubectl get pods -l app=alpaca-prod \
+-o jsonpath='{.items[0].metadata.name}')
+$ kubectl port-forward $ALPACA_POD 48858:8080
+```
 
 
+* In another terminal start `watch` command on the endpoint for the `alpaca-prod` service. Endpoints are a lower-level way of finding what a service is sending traffic to and are covered later in the chapter
+
+```bash
+kubectl get endpoints alpaca-prod --watch
+```
+
+![alpaca port forward](<Images/Service Discovery/alpaca port forward.png>)
+
+When we return the browser and hit the fail link for the readiness check. 
+
+### Looking Beyond the Cluster
+
+* We need allow traffic into the cluster. Not just exposing service inside the cluster.
+* The most portable way to do this is to use a feture called NodePorts, which enhance a a service even further.
+* In addition to a cluster IP, the system picks a port (or the user can specify one), and every node in the cluster then forwards traffic to that port to the service.
+* With this feature, if you can reach any node in the cluster, you can contact a service. 
+* we can use NodePort without knowing where any of the Pods for that service are running. This can be integrated with hardware or software load balancers to expose the service further
+
+Try this out by modifying the alpaca-prod service:
+```bash 
+$ kubectl edit service alpaca-prod
+```
+Change the spec.type field to NodePort. You can also do this when creating the
+service via kubectl expose by specifying --type=NodePort. The system will assign a
+new NodePort:
+
+![nodeport](<Images/Service Discovery/nodeport.png>)
+
+* The system assigned 32711 to this service.
 
 
+### Load Balancer Integration
+
+* If you have a cluster that is configured to integrate with external load balancers, you can use the `LoadBalancer` type.
+* This builds on the `NodePort type by additionally configuring the cloud to create a new load balancer and direct it at nodes in your cluster.
+* Most cloud-based K8s clusters offer load balancer integration, and there are a no of projects that implement load balancer integrationf for common physical load balancers as well.
+
+* Edit the alpaca-prod service agian `kubectl edit service alpaca-prod` and change spec.type to `LoadBalancer`.
+
+![Loadbalancer](<Images/Service Discovery/loadbalaner.png>)
+
+* Here we can see `192.168.5.15` is now assigned to the alpaca-prod service.
+
+
+### Advanced Details
+
+* K8s is built to be an extensible system. As such, there are layers that allow for more advanced integrations. Understanding the details of how a sophisticated concept liek services is implemented may help you troubleshoot or create more advanced integrations.
+
+#### Endpoints
+
+* Some application(and the system itself) want to be ale to use services without using a cluster IP. This is done with another type of object called an Endpoints object.
+* This is done with another type of object called an Endpoints object.
+
+``` kubectl describe endpoints alpaca-prod  ```
+
+* To use a service, an advanced application can talk to the k8s API directly to look up endpoints and call them. The K8s API even has the capability to "watch" objects and be notified as soon as they change. In this way, a client can react immediately as soon as the IPs associated with a service change.
 
 
 
