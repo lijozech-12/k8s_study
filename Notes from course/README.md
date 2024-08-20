@@ -1043,10 +1043,661 @@ spec:
 
 ### Scheduler Profiles
 
- 
+When pod si created it will be in Scheduling Queue. and pod with higher prioriy. Then filtering face what can be placed or not. Then Scoring phase every node is scored according to it, which node have more space left. Then Pod is Binded with the Node.
+
+Scheduling Queue: PrioritySort
+Filtering: NodeResourcesFit, NodeName, NodeUnschedulable
+Scoring: NodeResourcesFit, ImageLocality
+Binding: DefaultBinder
+
+All the plugins are added to extenstions
+
+https://github.com/kubernetes/community/blob/master/contributors/devel/sig-scheduling/scheduling_code_hierarchy_overview.md
+
+https://kubernetes.io/blog/2017/03/advanced-scheduling-in-kubernetes/
+
+https://jvns.ca/blog/2017/07/27/how-does-the-kubernetes-scheduler-work/
+
+https://stackoverflow.com/questions/28857993/how-does-kubernetes-scheduler-work
+
+
+### Monitor k8s cluster
+
+Install metric server from github or using minikube.
+
+### Managing Application Logs.
+
+If we are creating two containers using a single yaml file.
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: event-simulator-pod
+spec:
+  containers:
+  - name: event-simulator
+    image: kodekloud/event-simulator
+  - name: image-processor
+    image: some-image-processor
+```
+
+To see logs of kubectl use.
+```
+kubectl logs -f event-simulator-pod event-simulator
+```
+
+## Application Lifecycle Management
+
+### Rolling Updates and Rollbacks
+
+Every time container got changes a new rollout happeing
+
+```
+# to see the status of a deployment
+kubectl rollout status deployment/myapp-deployment
+
+# To see the history of the rollouts
+kubectl rollout history deployment/myapp-deployment
+
+kubectl apply -f deployment-definition.yml
+# to make changes in deployment
+
+kubectl rollout undo deployment/myapp-deployment
+# to rollout(going back) to the last change
+```
+
+**Deployment Strategy**
+
+Recreate: destroy all the pods at once and create everything it will have app down
+Rolling update: destroy and update pods one-by-one. zero downtime.
+
+```bash
+#create a new pod
+kubectl create -f deployment-definition.yml
+
+#getting new update
+kubectl get deployments
+
+#updating the pods/deployment
+kubectl set image deployment/myapp-deployment nginx=nginx:1.9.1 #it won't update the file only the deployment
+
+kubectl apply -f deployment-definintion.yml #after updating the .yml file
+
+#Status
+kubectl rollout status deployment/myapp-deployment
+
+kubectl rollout history deployment/myapp-deployment
+
+#rollback to before state
+kubectl rollout undo deployment/myapp-dep1
+
+
+```
+
+Their will be already a replicaset is present. and another replicaset is created. Every pod is created one by one then each pod is deleted one by one. Until all the pods are duplicated.
+
+### ENV Variables in K8s
+
+Direct way of specifying variables
+
+pod-definition.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simple-webapp-color
+spec:
+  containers:
+  - name: simple-webapp-color
+    image: simple-webapp-color
+    ports:
+    - containerPort: 8080
+    env:
+    - name: APP_COLOR
+      value: pink
+```
+
+Using ConfigMap
+```
+env:
+- name: APP_COLOR
+  valueFrom:
+    configMapKeyRef:
+```
+
+Using Secrets
+```
+env:
+- name: APP_COLOR
+  valueFrom:
+    secretKeyRef:
+```
+
+### ConfigMaps
+
+Where varaibles are stored as keyvalue pairs. When application is created these values are injected as keyvalue pairs into the pod-definition file.
+
+Create configmaps --->>> Inject them into 
+
+```bash
+
+#impertive way
+kubectl create configmap \
+  app-config --from-literal=APP_COLOR=blue \
+             --from-literal=APP_MOD=prod
+
+# using configmaps stored in a file
+kubectl create configmap \
+  app-config --from-file=app_config.properties
+```
+
+```
+kubectl create -f config-map.yaml
+
+kubectl get configmaps
+```
+config-map.yaml
+```bash
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  APP_COLOR: blue
+  APP_MODE: prod
+```
+
+Injecting config maps to pods
+
+pod-definition.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simple-webapp-color
+  labels:
+    name: simple-webapp-color
+spec:
+  containers:
+  - name: simple-webapp-color
+    image: simple-webapp-color
+    ports:
+    - containerPort: 8080
+    envFrom: #injecting env variables
+    - configMapRef:
+        name: app-config
+```
+
+### Secrets in Application
+
+used to save secrets in a encoded format inside the pod. 
+
+```bash
+#imperative method
+
+kubectl create secret generic <secret-name> --from-literal=<key>=<value>
+
+kubectl create secret generic \
+  app-secret --from-literal=DB_Host=mysql \
+             --from-literal=DB_User=root
+
+
+kubectl create secret generic \
+    <secret-name> --from-file=<path-to-file>
+
+kubectl create secret generic \
+    app-secret --from-file=app_secret.properties
+
+```
+
+declarative approach
+secret-data.yaml
+```bash
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+data:
+  DB_Host: <encoded format>
+  DB_User: <encoded format>
+  DB_Password: <encoded format>
+```
+
+```
+kubectl create -f secret-data.yaml
+
+kubectl get secrets
+
+kubectl describe secrets
+```
+
+How to convert data into encoded format.
+
+```
+# IN linux
+# to encode the value
+echo -n '<text needed to be encoded> | base 64
+
+
+# to decode the value
+echo -n '<encoded text>' | base64 --decode
+
+```
+
+**Inject into pod**
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simple-webapp-color
+  labels:
+    name: simple-webapp-color
+spec:
+  containers:
+  - name: simple-webapp-color
+    image: simple-webapp-color
+    ports:
+    - containerPort: 8080
+    envFrom:
+    - secretRef:
+        name: app-secret
+```
+
+### Encrypting Secret Data at Rest 
+
+Don't push secrets into github or anything. Since it's only encoded not encrypted.
+
+### Multi Container Pods
+
+LOG Agent and WEB Server
+
+some containers needs to work together in pod. So we will give containers that can start together and destroyed together.
+
+pod-definition.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simple-webapp
+  labels:
+    name: simple-webapp
+spec:
+  containers:
+  - name: simple-webapp
+    image: simple-webapp
+    ports:
+    - containerPort: 8080
+  - name: log-agent
+    image: log-agent
+```
+
+### Init Containers
+
+In a multi-container pod, each container is expected to run a process that stays alive as long as the POD's lifecycle. 
+For example in the multi-container pod that we talked about earlier that has a web application and logging agent, both the containers are expected to stay alive at all times.
+
+But their is times when you need to pulls a code or binary from a repository that will be used by the main web application. that is a task that will be run only on time when the pod is first created. This containers are called **initContainers**.
+
+An initContainer is configured in a pod like all other containers, except that it is specified inside a initContainers section,  like this:
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myapp-pod
+  labels:
+    app: myapp
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox:1.28
+    command: ['sh', '-c', 'echo The app is running! && sleep 3600']
+  initContainers:
+  - name: init-myservice
+    image: busybox
+    command: ['sh', '-c', 'git clone <some-repository-that-will-be-used-by-application> ; done;']
+```
+If any of the initContainers fail to complete, Kubernetes restarts the Pod repeatedly until the Init Container succeeds.
+
+https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
+
+
+## Cluster Maintenance
+
+### OS upgrade
+
+If you want to remove pods and add new pods.
+
+```
+kubectl drain node-1  #it will mark the node unschedulable, then schedule all the pod in that node to another node. We can update os or other things in the nodes
+
+
+kubectl cordon node-2 #mark node unschedulable. It won't delete existing pod. but new pods are not schedulable
+
+
+kubectl uncordon node-1  #mark node schedulabe
+```
+
+### Cluster Upgrade process
+
+K8s support recent 3 updates fro it's components. Like kubeapiserver, kubelet.
+they will suppot only recent 3 updates. Like 1.10, 1.11. 1.12 extra.
+To upgrade nodes first pass the pods to another nodes then upgrade the node or create an upgraded node then pass the pods.
+
+Updating nodes simultaneously make issues like downtime extra. But updating one by one doesn't cause that issue.
+
+We can only go one minor version at a time.
+
+guess our current version is 1.11
+```bash
+apt-get upgrade -y kubeadm=1.12.0-00 #get kubeadm
+
+#upgrade kubeadm
+
+kubeadm upgrade apply v1.12.0
+
+# upgrade kubelet
+
+apt-get upgrade -y kubelet=1.12.0-00
+
+systemctl restart kubelet
+
+kubectl get nodes
+```
+
+Steps to upgrade a node
+```bash
+
+# first drain the node and make unschedulabel. node name is node-1
+kubectl drain node-1
+
+# upgrade the kubeadm 
+apt-get upgrade -y kubeadm=1.12.0-00 #version to which you want to upgrade
+
+#upgrade kubelet
+apt-get upgrade -y kubelet=1.12.0-00
+
+#kubeadm upgrade
+kubeadm upgrade node config --kubelet-version v1.12.0
+
+# restart kubelet
+systemctl restart kubelet
+
+# To make it schedulabel
+kubectl uncordon node-1
+
+# do this to all the nodes node-1, node-2, node-3
+```
 
 
 
+``` kubeadm upgrade plan ``` we need upgrade kubeadm to upgrade the cluster
 
+cluster upgrade.
+``` cat /etc/*release*```
+
+kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
+
+### Backup and Restore Methods
+
+
+```bash
+# query kubeapiserver and save the resource in 
+# backup using kube apiserver
+kubectl get all --all-namespaces -o yaml > all-deploy-services.yaml
+
+# we can also backup using etcd
+#ETCD cluster backupt. It is hosted in etcd cluster
+# It will backup the snapshot
+ETCDCTL_API=3 etcdctl \
+    snapshot save snapshot.db
+
+service kube-apiserver stop 
+
+# saves the snapshot and save it in data dir 
+ETCDCTL_API=3 etcdctl \
+    snapshot save snapshot.db \
+    --data-dir /var/lib/etcd-from-backup
+
+# after that make changes to etcd configuration file etcd.service
+
+# then reload the service daemon and restart the etcd cluster
+systemctl daemon-reload
+service etcd restart
+service kube-apiserver start
+
+
+ETCDCTL_API=3 etcdctl \
+    snapshot save snapshot.db \
+
+https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/#backing-up-an-etcd-cluster
+
+https://github.com/etcd-io/website/blob/main/content/en/docs/v3.5/op-guide/recovery.md
+
+https://www.youtube.com/watch?v=qRPNuT080Hk
+
+```
+
+
+## Security
+
+### Security Primitives in k8s
+
+**Secure Hosts**
+
+- password based authentication disabled
+- SSH key based authentication
+
+### Authentication
+
+
+k8's doesn't store details internally it relay upon outside users and outside certificaition teams.
+
+```bash
+# we cannot create users or see users list like this
+kubectl create user user1
+
+kubectl list users
+
+## but we can create and manage service accounts.
+# Since the passwords and all managed by third party like LDAP
+
+kubectl create serviceaccount sa1 #to create service accounts
+```
+
+all the request from admin or developers goes throught kube-apiserver and it's Authenticate User before processing the request.
+
+kube-apiserver have static password file, static token file, certificates, identity services.
+
+
+**Auth Mechnisms-Basic**
+
+Create csv file with password, user and user-id
+user-details.csv
+```bash
+password1,user1,user-id1
+password2,user2,user-id2
+password3,user3,user-id3
+```
+add this to kube-apiserver.service file
+```bash
+--basic-auth-file=user-details.csv
+```
+we can also have user-token-details.csv instead of that so that we can have tokenized password file.
+
+### TLS certificates.
+
+Securing k8s with TLS certificates and other cluster components.
+
+### TLS Basics
+
+certificate is used to have trust between two parties in a network.
+
+symmetric encryption where we use the same key to encrypt and decrypt but the hacker can snipe into it and read the password.
+
+Asymmetric Encryption. where uses two keys public and private.
+
+If you want to have communication with a bank server. the bank send a public key with validation certificates from a authenticated certificate authority(CA). after that user uses this key to encrypt there symmetric key and send it to the bank. so that they can decrypt the password of the and other details of the users.
+
+This symmetric is used for communication going forward.
+
+Root Certificaties : used by CA
+Server Certificates: Used by server
+Client Certificates: in the Client
+
+### TLS in k8s
+
+The interactions between master and all the nodes need to be secured.
+
+server components
+
+kube-api server has apiserver.crt and apiserver.key / apiserver-kubelet-client.crt apiserver-kubelet-client.key
+etcd server: etcdserver.crt etcdserver.key / apiserver-etcd-client.crt apiserver-etcd-client.key
+kubelet server : kubelet.crt kubelet.key / kubelet-client.crt kubelet-client.key
+
+client certificates for clients. 
+admin admin.crt, admin.key
+kubescheduler scheduler.crt scheduler.key
+kube-controller-manger controller-manager.crt controler-manager.key
+kube-proxy kube-proxy.crt kube-proxy.key
+
+these 3 has key and crts
+
+### viewing tls certificates
+
+```bash
+cat /etc/systemd/system/kube-apiserver.service
+cat /etc/kubernetes/manifests/kube-apiserver.yaml
+```
+
+for viewing the certificate location after getting the certificate go to 
+`/etc/kubernetes/pki/apiserver.crt`
+
+```bash
+openssl x509 -in /etc/kubernetes/pki/apiserver.crt -text -noout
+```
+
+### Certificate API
+
+the key-cert pair that stored in server in cs server. 
+
+1. Create Certificate Sigining Request Object.
+``` openssl genrsa -out jane.key 2048 ```
+2. Review Requests
+``` openssl req -new -key jane.key -subj "/CN=jane" -out jane.csr ```
+
+administor takes the key and makes a certificate sigining requests objects
+this object is created by using a manifest file using usual fields.
+jane.csr -> `cat jane.csr | base64` -> encoded format
+jane-csr.yaml
+```bash
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: jane
+spec:
+  expirationSeconds: 600 #seconds
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+  request:
+    <encoded text. then submit the request>
+```
+once the object is created all the request can be seen by admins by running.
+`kubectl get csr`
+3. Approve Requests
+``` kubectl certificate approve <name of certificate(here jane)> ```
+k8s signs the certificate using ca pairs and create a certificates for users.
+
+4. Share Certs to Users.
+
+
+``` 
+# view the certificate using 
+kubectl get csr jane -o yaml
+
+# to decode the certificate 
+echo "encoded text" | base64 --decode
+
+# controller manager as
+CSR-APPROVING CSR-SIGNING
+
+cat /etc/kubernetes/manifests/kube-controller-manager.yaml
+```
+
+### KubeConfig
+
+client uses certificates to query list pods using curl
+
+```bash
+kubectl get pods
+  --server my-kube-playground:6443
+  --client-key admin.key
+  --client-certificate admin.crt
+  --certificate-authority ca.crt
+```
+
+typing this is tedious task so we can mobe this to a file.
+KubeConfig File
+config
+```bash
+  --server my-kube-playground:6443
+  --client-key admin.key
+  --client-certificate admin.crt
+  --certificate-authority ca.crt
+```
+use the below command after that
+```bash
+kubectl get pods
+  --kubeconfig config(name of the file)
+```
+
+usually it will look for file in `&HOME/.kube/config` where you don't need to specify the path.
+
+kubeconfig file is in specific formats
+clusters: to which you can access
+Users: who as access to this cluster
+Context: which user account can acces which cluster
+
+
+#in below file the details are hidden
+```bash
+apiVersion: v1
+kind: Config
+current-context: dev-user@google
+clusters:
+- name: my-kube-playground
+- name: productions
+- name: google
+contexts:
+- name: my-kube-admin@my-kube-playground
+- name: dev-user@google
+- name: prod-user@proudction
+users:
+- name: my-kube-admin
+- name: admin
+- name: dev-user
+- name: prod-user
+```
+
+# to see kubectl config command
+```bash
+#gives the main file in the location
+kubectl config view 
+
+# To see a custom file
+kubectl config view --kubeconfig=my-custom-config
+
+# To change the current context
+kubectl config use-context prod-user@production
+
+# config -h
+kubectl config -h
+```
+
+### API Groups
 
 
