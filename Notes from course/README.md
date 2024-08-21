@@ -1700,4 +1700,280 @@ kubectl config -h
 
 ### API Groups
 
+add notes from k8s documentation
+
+All resources in k8s are grouped into differnent api groups
+ex
+app:
+  v1
+    deployments (resources)
+    replicasets
+    statefulsets
+
+    and command used by it is verbs
+
+### Authorization
+
+Different users needs different type of authorizations
+Admins need to create and delete resources while Developer only need to deploy application no need to create or delete resources. While external users or bots needs very minimum access to the cluster that's where the authorization comes in handy
+
+**Authorization Mechanisms**
+Different type of authorizations are 
+Node based
+ABAC attribute based
+RBAC role based
+Webhook
+
+1. Node Authorizer
+used to authorize nodes. like kubelet needs to communicate to the kube api server in the cluster.
+
+2. ABAC : attribute based access control
+
+Associate a user or set of users with a set of permissions
+dev-user: can view PODs, Create, Delete PODs.
+
+```
+{"kind":"Policy","spec":{"user":"dev-user-2", "namespace":"*","resource":"pods", "apiGroup":"*"}}
+{"kind":"Policy","spec":{"user":"dev-user", "namespace":"*","resource":"pods", "apiGroup":"*"}}
+
+{"kind":"Policy","spec":{"user":"security-1", "namespace":"*","resource":"csr", "apiGroup":"*"}}
+```
+we will do this by creating a user policy in a json format and passing it to the kube-api-server.
+We can create multiple users like this. dev-user, dev-user-2, security-1 etc..
+
+3. RBAC: Role Base Access control
+
+Instead of giving certain permission to users, group we create a role. Like developer he can view pods, create pods, delete pods. 
+
+Role for Security and Developer and created then all the users. usergroup is matched to that
+
+4.WebHook
+
+If you want to outsource the authorization. Open Policy Agent is third party tool that help with admission control and authrization. Kube-api server makes a call to open Policy Agent with user details. and it send a data back saying whether he needs to permitted or not. Then Open policy agent can decide whether agent should be permitted or not.
+
+5. Always Allow
+6. Always Deny
+
+The mode are set using authorization-mode option in kube api server. If not set it AlwaysAllow. We can give a comma seprated mode ex, `Node,RBAC,Webhook` for the multiple nodes you want to use.
+The authorization done the order in which is specified Node->RBAC->Webhook.
+Node authroizer only allow node requests. so if node request denies it goes to RBAC. If any module allow request it gives authorization
+
+### RBAC
+
+How we create a role
+
+developer-role.yaml
+```bash
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list","get","create", "update", "delete"]
+- apiGroups: [""]  #if need to allow user to create config maps
+  resources: ["ConfigMap"]
+  verbs: ["create"]
+```
+
+apiGroups for core group we can keep it blank. For resources what are the resources the are going to access. For verbs what are the commands the are using.
+
+After creating roles assign it to users. dev-user -> developer permission
+We create another role-binding object
+
+devuser-developer-binding.yaml
+```bash
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: devuser-developer-binding
+subjects:
+- kind: User
+  name: dev-user
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: developer
+  apiGroup: rbac.authorization.k8s.io
+```
+
+```bash
+#create the role bindings using
+kubectl create -f devuser-developer-binding.yaml
+```
+
+Roles and roles binding fall under the scope of name spaces. So here the dev-user have acces to devleoper role in default namespaces. if you want to limit the dev-users access to within a different name space limit their access within a metadata of their file while creating the file. 
+
+```bash
+# to view the created roles
+kubectl get roles
+
+#to list rolebindings
+kubectl get rolebindings
+
+# to get more details of the role run
+
+kubectl describe role <role-name>(developer)>
+
+# to ger more details about a specific role bindings
+kubectl describe rolebinding <rolebinding name> # ex devuser-developer-binding
+
+#to check if you have access to particular operation
+
+kubectl auth can-i create deployments
+
+kubectl auth can-i delete nodes
+
+# if you want to check as a particular user
+kubectl auth can-i create deployments --as dev-user
+
+kubectl auth can -i create pods --as dev-user
+
+#if a particular user have permission to create pods in a particular namespace
+
+kubectl auth can-i create pods --as dev-user --namespace test
+```
+
+
+```bash
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list","get","create", "update", "delete"]
+  resourceNames: ["blue", "orange"] #to restrict users to a specific resource
+```
+
+### Cluster Roles and Role Bindings
+
+Their is two types of resources
+1. namespace scoped
+  where we need specify namespace when you create that particular resources. 
+  ex: pods, replicasets, jobs, deployments, services, secrets, roles, rolebindings, configmaps, PVC
+2. Cluster Scoped
+  where we don't specify the namespace.
+  ex. nodes, PV, clusterroles, clusterrolebindings, certificatesigningrequests, namespaces.
+
+```bash
+# to see the namespce scoped resources full list
+
+kubectl api-resources --namespaced=true
+
+#to see the cluster scoper resources full list
+
+kubectl api-resources --namespaced=false
+```
+
+How to authroize users to use cluster wide resources. like node or persistent volumes.
+
+**Clusterroles** : these are roles but for cluster scoper resources.
+ex. Cluster Admin to view, create, delete nodes
+    storage admin to view, create, delete PVCs
+    PVC = persistent Volumes and Claims
+
+Creating a cluster roles
+cluster-admin-role.yaml
+```bash
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-administrator
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["list", "get", "create", "delete"]
+```
+
+Now create a role binding object for the cluster.
+
+cluster-admin-role-binding.yaml
+```bash
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admin-role-binding
+subjects:
+- kind: User
+  name: cluster-admin
+  apiGroup: rbac.authorizaiton.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-administrator
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Creting cluster bindings.
+```bash
+kubectl create -f cluster-admin-role-binding.yaml
+```
+
+
+We can also create cluster role for namespaced resources to. If we do that role as access to resources in all namespaces.(ex. pods in all namespaces)
+
+```
+kubectl get clusterroles --no-headers | wc -k
+# to count the clusterroles
+```
+
+### Service Accounts
+
+User accounts are account used by users to access the accounts. 
+
+service accounts are accounts used by application like prometheus or Jenkins to access k8s cluster.
+
+```bash
+# to create serviceaccount
+kubectl create serviceaccount dashboard-sa
+#assign the right permissions using role based access controls.
+
+# to get details of serviceaccount
+kubectl get serviceaccount
+
+# To get details of serviceaccount
+kubectl describe serviceaccount dashboard-sa
+
+#the token are stored in secrets format.
+
+#to view the token run and use that token for authentications 
+kubectl describe secret <name of secrete> # ex dashboard-sa-token-kbbdm
+
+```
+
+When we create a service account. It will create a service account token. It also generates a token for the service account. Then it will create a secret object and stores this token in that service account. Then this secret object is linked to the service account.
+
+This token can be used for making k8s risk calls for API's. We can use the token as header when you are doing a risk call to k8s API.
+
+If the application is running in the k8s cluster. Place the token as volume inside the pod so that application can access it easily.
+
+Each names space there will be a defualt serviceaccount and token associated with it. The deafult service account is to much restritcted.
+
+K8s automatically mount the default service account if you didn't specified any. If you want to change the service account of the pod you need to delete it and recreate it. But for deployment it will rollout automatically.
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-kubernetes-dashboard
+spec:
+  containers:
+  - name: my-kubernetes-dashboard
+    image: my-kubernetes-dashboard
+  serviceAccountName: dashboard-sa
+```
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-kubernetes-dashboard
+spec:
+  containers:
+  - name: my-kubernetes-dashboard
+    image: my-kubernetes-dashboard
+  automountServiceAccountToken: false #not to mount cluster roles automatically
+```
 
