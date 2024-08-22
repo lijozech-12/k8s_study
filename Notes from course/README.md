@@ -1976,4 +1976,359 @@ spec:
     image: my-kubernetes-dashboard
   automountServiceAccountToken: false #not to mount cluster roles automatically
 ```
+ If you list the contents of the directory mount directory inside the pod we can see that token is inserted as 3 seprate files. `ca.crt namespace token`
 
+ secret-definition.yaml
+```bash
+apiVersion:v1
+kind:Secret
+type:kubernetes.io/service-account-token
+metadata:
+  name: mysecretname
+  annotaions:
+    kubernetes.io/service-account.name: dashboard-sa
+```
+
+To create a secret object first create service account named `dashboard-sa`.
+
+### Image Security
+
+when you define like `image: nginx`. it's actually stored as `image:  library/nginx`. If you don't specified any images from your repo. k8s takes images from offical account.
+
+```
+image: library/nginx
+       {user/account}/{image/repository}
+
+```
+
+to use images from docker hub or other private repos first we need create a secret and pass that secret to pod definition file.
+
+```bash
+kubectl create secret docker-registry regcred \
+--docker-server=private-registry.io \
+--docker-username=registry-user \
+--docker-password=registry-password
+--docker-email=registry-user@org.com
+```
+
+Now we need to add this secret to pod defintion files
+
+nginx-pod.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod
+spec:
+  containers:
+  - name: nginx
+    image: privater-registry.io/apps/internal-image
+  imagePullSecrets: #it is used to pass the registry details an
+  - name: regcred
+```
+
+### Security in Docker
+
+### Security Context
+
+We can run different containers with differnt capabilities in using docker. like root user etc..
+
+```bash
+docker run --user=1001 ubuntu sleep 3600 #you can also create image using USER and build it then use it to run
+
+docker run --cap-add MAC_ADMIN ubuntu
+```
+
+adding capabilities and all in containers levell
+
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-pod
+spec:
+  securityContext:
+    runAsUser: 1000 #to define user in pod level
+  containers:
+  - name: ubuntu
+    image: ubuntu
+    command: ["sleep", "3600"]
+```
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-pod
+spec:
+  containers:
+  - name: ubuntu
+    image: ubuntu
+    command: ["sleep", "3600"]
+    securityContext: #since security in container level it only have access to that
+      runAsUser: 1000
+      capabilites:
+        add: ["MAC_ADMIN"]
+```
+
+### Network Policiess
+
+Incoming traffic from user is Ingress. and outgoing traffic to the API is Egress.
+Ing
+
+When you want network access to the database only throught API server not. We create `network policy`. This is another object in k8s namespace. We can link network policy to one or more nodes and add rules to that.
+
+```bash
+#give labels in pod definition files
+labels:
+  role: db
+
+# associate labels in the network policy
+podSelector:
+  matchLabels:
+    role: db
+```
+
+policy-definition.yaml
+```bash
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-policy
+spec:
+  podSelector: #for all pods in db role
+    matchLabels:
+      role: db
+  policyTypes: #Allow ingress rules from
+  - Ingress #only ingress traffic is isolated pod is still able to make egress calls
+  ingress:
+  - from:
+    - podSelector: #it will work as and with namespace selector. the pods should have name and in particular namespace
+        matchLabels: #from api pods
+          name: api-pod
+      namespaceSelector: #if you only wants to allow ingress from a specific namespace only
+        matchLabels: # First create the labels for specific namespace Without pod selectors all pods in the particular namespace is allowed
+          name: prod
+    - ipBlock: # work as or with podSelector any one of the rules are satisfied.
+        cidr: 192.168.5.10/32 #ip address of backup server. allow access from specific ip outside k8s.
+    ports: #To the port 3306 block all other pods
+    - protocol: TCP
+      port: 3306
+```
+
+
+```
+kubectl create -f policy-definition.yaml
+```
+
+policy-definition-egress.yaml
+```bash
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-policy
+spec:
+  podSelector: #for all pods in db role
+    matchLabels:
+      role: db
+  policyTypes: #Allow ingress rules from
+  - Ingress #only ingress traffic is isolated pod is still able to make egress calls
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          name: api-pod
+    ports:
+    - protocol: TCP
+      port: 3306
+  egress: # egress rule to allow traffic to a backupserver outside. You can add pod, namespace selectors also
+  - to:
+    - ipBlock:
+        cidr: 192.168.5.10/32
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+## Storage
+
+
+### Docker Storage
+
+Docker works in a layered architecture. Every line in the dockerfile is layer. each layer is diff from the previous layer. so only the data/size needed to that layer is used.  If we make changes in a inner layer. the changes is only rebuilded the previous layers are reused. thus docker saving rebuilding time and space.
+
+
+```bash
+FROM Ubuntu
+RUN apt-get update && apt-get -y install python
+RUN pip install flask flask-mysql
+COPY . /opt/source-code # if we make changes to this only this layer is rerun. the previous layers is not rerun.
+ENTRYPOINT FLASK_APP=/opt/source-code/app.py flask run
+```
+
+To create a volume and save it so that the data is not deleted. 
+
+### Container Storage Interface (CSI)
+
+
+CRI : Container Runtime Interface . allow containers to use k8s without directly using the code
+CNI : Container Network Interface. Allow networking solutions to access k8s.
+
+
+### Volumes
+
+data is transient in nature. volume will help to store data in the particulr node
+
+volume-definition.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: random-number-generator
+spec:
+  containers:
+  - image: alpine
+    name: alpine
+    command: ["/bin/sh","-c"]
+    args: ["shuf -i 0-100 -n 1 >> /opt/number.out;"]
+    volumeMounts:
+    - mountPath: /opt #mounting path from the container to the path in node
+      name: data-volume
+  
+  volumes:
+  - name: data-volume
+    hostPath:
+      path: /data  #directory in the node
+      type: Directory
+
+  # we can also store data in awss3 or like other places
+  volumes:
+  - name: data-volume
+    awsElasticBlockStore:
+      volumeID: <volume-id>
+      fsType: ext4
+```
+
+### Persistent Volumes
+
+Administor can create a large pool of storage. PVs (persistent volumes). and user can use/claim those volumes using PVCs (persistent volume claims).
+
+pv-definition.yaml
+```bash
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-vol1
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  hostPath:
+    path: /tmp/data  #directory in the node. not be used in production env
+```
+
+```
+kubectl create -f pv-definition.yaml  #to create persistent volume
+```
+
+pv-definition.yaml
+```bash
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-vol1
+spec:
+  accessModes:
+    - ReadWriteOnce #there is different access modes
+  capacity:
+    storage: 1Gi
+  awsElasticBlockStore:
+    volumeID: <volume-id>
+    fsType: ext4  # for production data is stored in aws
+```
+
+### Persistent Volumes Claims(PVC)
+
+admins creat PVs and user create PVC. It's then binded together. 
+There is 1 to 1 relations with claims and volumes
+
+pvc-definition.yaml
+```bash
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: myclaim
+spec:
+  accessModes:
+  - ReadWriteOnce
+
+  resources:
+    requests:
+      storage: 500mi
+```
+
+```
+kubectl create -f pvc-definiton.yaml
+
+kubectl get persistentvolumeclaim
+```
+
+
+pod-definition.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  containers:
+    - name: myfrontend
+      image: nginx
+      volumeMounts:
+      - mountPath: "/var/www/html"
+        name: mypd
+  volumes:
+    - name: mypd #to use pvc in pods
+      persistentVolumeClaim:
+        claimName: myclaim
+```
+
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/#claims-as-volumes
+
+### Storage Classes 
+
+If you want to provision volumes automatically we can use dyanamic provisionser. It can create storage in google cloud or something similar to that and attach to the pv. that's calle dynamic provisionr.
+
+We don't need pv since pv is automatically created when we are using storage class.
+
+sc-definition.yaml
+```bash
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: google-storage
+provisioner: kubernetes.io/gce-pd
+parameters:
+  type: pd-standard [pd-standard | pd-ssd]
+  replication-type: none [none | regional-pd]
+# parameters are specific to cloud storages
+```
+
+It wil automatically create PV
+
+```bash
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: myclaim
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: google-storage #define storage class name in pv definition
+  resources:
+    requests:
+      storage: 500mi
+```
