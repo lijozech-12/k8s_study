@@ -2332,3 +2332,354 @@ spec:
     requests:
       storage: 500mi
 ```
+
+## Networking
+
+switch, routers
+
+```bash
+ip link #to list and modify interfaces on the host.
+ip addr #to see ip addresses assigned to those interfaces
+
+# to se IP addr on the interfaces.
+ip addr add 192.168.1.10/24 dev eth0
+
+# the changes made is temporary until next restart. 
+#make changes in /etc/network/interfaces file
+
+# to see routing table
+ip route
+
+# to add entries into the routing table.
+ip route add 192.168.1.0/24 via 192.168.2.1
+
+#command to check ip forwarding is enabled in host
+cat /proc/sys/net/ipv4/ip_forward
+```
+
+### DNS 
+
+To assign a ip address to a name 
+cat >> /etc/hosts
+```
+192.168.1.11    db
+```
+
+
+### Service Networking
+
+When a service is created it can access all the pods in different nodes. but this is only accessiable in a specific cluster. This is called **ClusterIP**.
+
+
+**NodePort** It works like clusterIp but in addition to that it exposes a port on all nodes in the cluster that way external users/application have access to this. 
+
+### Cluster DNS
+
+if you have test, web-service and web pods in same namespace. You can just access web-service from test using web-service. `curl http://web-service`
+
+if you the webservice is in apps namespace. You need to access it by `curl http://web-service.apps` the last apps is the namespace in which web-service resides.
+
+### CoreDNS
+
+` cat /etc/coredns/Corefile ` to store core dns
+```
+kubectl get configmap -n kube-system
+```
+
+### INGRESS
+
+Using nginx as ingress controller in k8s.
+
+```bash
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: nginx-ingress-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: nginx-ingress
+  template:
+    metadata:
+      labesls:
+        name: nginx-ingress
+    spec:
+      containers:
+      - name: nginx-ingress-controller
+        image: quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.21.0
+      
+      args:
+      - /nginx-ingress-controller
+      - --configmap=$(POD_NAMESPACE)/nginx-configuration
+      env:
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      ports:
+      - name: http
+        containerPort: 80
+      - name: https
+        containerPort: 443
+```
+
+Now we need to create service to expose it connect to the nginx 
+
+```bash
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 443
+    protocol: TCP
+    name: https
+  selector:
+    name: nginx-ingress #to connect to the ingress controller
+```
+
+Now we need configmap to pass configuration data data to nginx controller
+```bash
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: nginx-configuration
+```
+
+```bash
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx-ingress-serviceaccount
+```
+
+To create an ingress resource.
+ingress-wear.yaml
+```bash
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-wear
+spec:
+  backend:
+    serviceName: wear-service
+    servicePort: 80
+```
+
+this will direct all the service to the wear-service. It can redirect rules based on different paths.
+```bash
+kubectl create -f Ingress-wear.yaml
+
+kubectl get ingress
+```
+
+ingress-wear-watch.yaml
+```bash
+metadata:
+  name: ingress-wear-watch
+spec:
+  rules:
+  - http:
+      paths: #one path for each url we define
+      - path: /wear #redirects it to /wear path
+        backend:
+          serviceName: wear-service
+          servicePort: 80
+      - path: /watch  # redirects it to /watch path
+        backend:
+          serviceName: watch-service
+          servicePort: 80
+```
+
+```
+kubectl describe ingress ingress-wear-watch
+# to see ingress rules
+
+Ingress-wear-watch.yaml
+```bash
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-wear-watch
+spec:
+  rules:
+  - host: wear.my-online-store.com
+    http:
+      paths:
+      - backend:
+          serviceName: wear-service
+          servicePort: 80
+  - host: watch.my-online-store.com
+    http:
+      paths:
+      - backend:
+          serviceName: watch-service
+          servicePort: 80
+
+```
+
+The above file is also going to match the host url, path and specific port. resource sorting through domain names
+
+## Trouble Shooting
+
+### Application Failure
+
+If web server is accessible in a specific port or not.
+```
+curl http://web-service-ip:node-port
+#check website is accesible or not
+
+kubectl describe service web-service
+#checking the service
+
+#checking if it's in a running state
+kubectl get pod
+
+#to check the events of the pod
+kubectl describe pod web
+
+#to check the logs of web pod
+kubectl logs web
+
+#watching the logs using
+kubectl logs web -f
+
+#watching logs of previous pod
+kubectl logs web -f --previous
+```
+
+```bash
+#commands to help
+kubectl config --help
+
+kubectl config set-context --help
+
+#Changing the namespace
+kubectl config set-context --currrent --namespace=alpha
+
+#to see pods, deploy and service
+kubectl get pods
+
+kubectl get deploy
+
+kubectl get svc #to see service
+
+curl http://localhost:30081 #since it's accessible in nodeport
+
+kubectl edit svc mysql #to edit a specific service
+
+##it will be saved in a temporary file . delet the current service and create new service using
+kubectl create -f <temporaryfilename>.yaml
+
+kubectl config set-context --current --namespace=beta
+
+kubectl describe svc mysql-service #to see services and it's endpoints.
+
+kubectl pods -o wide #to see Ips of pods
+
+kubectl edit svc mysql-service #to edit the services
+#check credentials, port, labels   
+
+kubectl replace --force -f <temporary file name after edit>.yaml
+```
+
+### control Plance faliure
+
+```bash
+kubectl get nodes
+#to check nodes
+
+#to check pods
+kubectl get pods
+
+kubectl get pods -n kube-system
+
+#if it deployed it as pods
+# to see servicess
+service kube-apiserver status
+
+#to see status of kube-controller-manager
+service kube-controller-manager status
+
+#to see status of kube-scheduler
+service kube-scheduler status
+
+#check status of kubelet and kube-proxy in worker nodes
+service kubelet status
+
+service kube-proxy status
+
+
+#check service logs of componeents
+
+kubectl logs kube-apiserver-master -n kube-system
+
+#to view kube api service logs
+
+sudo journalctl -u kube-apiserver
+
+alias k=kubectl
+kubectl cheat sheet #search it in k8s documentaion run the first thing it will give you autocompletion
+
+kubectl get rs
+
+k get pod 
+
+kubectl get pods -n kube-system #to get details of contorl plane things in a cluster. to edit it
+
+#if you found any issues with anyoff the components
+
+kubectl describe pod -n kube-system <name of the component>
+
+#if you found any issues go to 
+cat /etc/kubernetes/manifests/kube-scheduler.yaml #in case of issues with kube-scheduler app
+
+kubectl get pods -n kube-system --watch. #to watch it until it's ready
+
+
+kubectl logs kube-scheduler-controlplane -n kube-system #to see the logs of controlplane
+
+kubectl scale deploy app --replicas=2 #to scale the application
+
+#the job a scaling everything is controller managers if do
+
+kubectl describe -n kube-system pods kube-controller-manager-controlplane
+
+kubectl logs kube-controller-manager-controlplane -n kube-system
+```
+
+### Worker Node Failure
+
+```bash
+#to see the nodes
+kubectl get nodes
+
+#to describe nodes
+kubectl describe node worker-1
+#if you see false or unknown it's not working.
+
+service kubelet status #check kubelet servicess
+
+sudo journalctl -u kubelet #to check logs of kubelet
+
+#check kubelet certificates
+openssl x509 -in /var/lib/kubelet/worker-1.crt -text
+
+
+# to ssh into a particular node
+ssh node01
+
+ls /etc/kubernetes/kubelet.conf #where the file are saved
+```
