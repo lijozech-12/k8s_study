@@ -296,10 +296,22 @@ kubectl create -f rc-defintion.yml
 # to see different replicas
 kubctl get replicationcontroller
 
+kubectl get replicaset #to get replicasets
+
 kubectl get pods
+
+kubectl describe replicaset new-replica-set #to see the details fo replicaset
+
+kubectl describe pod <pod-name> #to see issues in more detail
+
+kubectl delete pod <pod-name> #to delete pods
+
+kubectl explain replicaset #to see the explnation of replicaset
 ```
 
 ##### replicaset
+
+
 
 replicaset-defintion.yml
 ```bash
@@ -342,6 +354,48 @@ kubectl replace -f replicaset-definition.yml #to replace the replicaset
 kubectl scale --replicas=6 -f replicaset-defintion.yml #using definition file
 
 kubectl scale --replicas=6 replicaset myapp-replicaset # using type and name
+
+kubectl edit rs new-replica-set  #to edit the rs
+#after the above step delete all the pods in replica set so that it can replaced by new ones
+
+controlplane ~ ➜  kubectl delete pod new-replica-set-2zbf5 new-replica-set-bglld new-replica-set-g2zwh new-replica-set-8swq9 
+pod "new-replica-set-2zbf5" deleted
+pod "new-replica-set-bglld" deleted
+pod "new-replica-set-g2zwh" deleted
+pod "new-replica-set-8swq9" deleted
+
+controlplane ~ ➜  kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+new-replica-set-9z2wp   1/1     Running   0          7s
+new-replica-set-ppv47   1/1     Running   0          7s
+new-replica-set-l5vsg   1/1     Running   0          7s
+new-replica-set-nhpkp   1/1     Running   0          7s
+
+
+#to scale or edit replica set
+
+controlplane ~ ➜  kubectl edit rs new-replica-set 
+replicaset.apps/new-replica-set edited
+
+controlplane ~ ➜  kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+new-replica-set-9z2wp   1/1     Running   0          2m30s
+new-replica-set-ppv47   1/1     Running   0          2m30s
+new-replica-set-l5vsg   1/1     Running   0          2m30s
+new-replica-set-nhpkp   1/1     Running   0          2m30s
+new-replica-set-jc78h   1/1     Running   0          13s
+
+#to scale to 2 replicas
+controlplane ~ ➜  kubectl scale --replicas=2 rs/new-replica-set 
+replicaset.apps/new-replica-set scaled
+
+controlplane ~ ➜  kubectl get pods
+NAME                    READY   STATUS        RESTARTS   AGE
+new-replica-set-9z2wp   1/1     Running       0          3m18s
+new-replica-set-l5vsg   1/1     Running       0          3m18s
+new-replica-set-ppv47   1/1     Terminating   0          3m18s
+new-replica-set-jc78h   1/1     Terminating   0          61s
+new-replica-set-nhpkp   1/1     Terminating   0          3m18s
 
 # the above command changes the size of replicasets. but the number will stay the same in file
 ```
@@ -414,19 +468,35 @@ kubectl create -f nginx-deployment.yaml
 #In k8s version 1.19+, we can specify the --replicas option to create a deployment with 4 replicas.
 
 kubectl create deployment --image=nginx nginx --replicas=4 --dry-run=client -o yaml > nginx-deployment.yaml
+
+kubectl create deployment --help #to see the imperative commands and it's help
 ```
 
 ### Services
 
 Connectivity betwen different users, database, frontend. losecoupling between different service.
 
+In Kubernetes, a Service is a method for exposing a network application that is running as one or more Pods in your cluster.
+
+A key aim of Services in Kubernetes is that you don't need to modify your existing application to use an unfamiliar service discovery mechanism. You can run code in Pods, whether this is a code designed for a cloud-native world, or an older app you've containerized. You use a Service to make that set of Pods available on the network so that clients can interact with it.
+
+Each Pod gets its own IP address (Kubernetes expects network plugins to ensure this). For a given Deployment in your cluster, the set of Pods running in one moment in time could be different from the set of Pods running that application a moment later.
+
+This leads to a problem: if some set of Pods (call them "backends") provides functionality to other Pods (call them "frontends") inside your cluster, how do the frontends find out and keep track of which IP address to connect to, so that the frontend can use the backend part of the workload?
+
 listen to port on pod and forward that traffic into a port in the node.
 
 
 service types.
-1. nodeport port for a node
-2. ClusterIp: ip address for node
-3. LoadBalancer: for an ip
+
+**ClusterIP**
+Exposes the Service on a cluster-internal IP. Choosing this value makes the Service only reachable from within the cluster. This is the default that is used if you don't explicitly specify a type for a Service. You can expose the Service to the public internet using an Ingress or a Gateway.
+**NodePort**
+Exposes the Service on each Node's IP at a static port (the NodePort). To make the node port available, Kubernetes sets up a cluster IP address, the same as if you had requested a Service of type: ClusterIP.
+**LoadBalancer**
+Exposes the Service externally using an external load balancer. Kubernetes does not directly offer a load balancing component; you must provide one, or you can integrate your Kubernetes cluster with a cloud provider.
+**ExternalName**
+Maps the Service to the contents of the externalName field (for example, to the hostname api.foo.bar.example). The mapping configures your cluster's DNS server to return a CNAME record with that external hostname value. No proxying of any kind is set up.
 
 port on pod: target port. 
 port: the port in service
@@ -447,6 +517,11 @@ spec:
   selector:
     app: myapp
     type: front-end # labels from the pod defintion file
+```
+
+```bash
+
+
 ```
 
 It will create a service spanning accross the nodes and make the service available
@@ -535,7 +610,7 @@ metadata:
 ```
 
 ```bash
-kubectl crete -f namespace-dev.yml
+kubectl create -f namespace-dev.yml
 
 kubectl create namespace dev # for easy creation
 
@@ -548,6 +623,25 @@ kubect get pods --namespace=default
 kubectl get pods --namespace=prod
 
 kubectl get pods --all-namespaces #to see pods in all namespaces
+
+kubectl get ns
+kubectl get namespaces #to get the namespaces
+
+#to create in specific namespace
+controlplane ~ ➜  kubectl run redis --image redis -n finance 
+pod/redis created
+
+controlplane ~ ➜  kubectl get pods -n finance 
+NAME      READY   STATUS    RESTARTS   AGE
+payroll   1/1     Running   0          10m
+redis     1/1     Running   0          15s
+
+#to get pods in all namespaces
+kubectl get pods --all-namespaces 
+
+
+#to see the services
+kubectl get svc -n=dev
 ```
 
 For defining **Resource Quota** for a namespace
@@ -586,7 +680,118 @@ kubectl set image deployment nginx nginx=nginx:1.18
 
 kubectl replace -f nginx.yaml  #after editing the .yaml file
 kubectl replace --force -f nginx.yaml  #forcefully replacing it
+
+
+#part two
+
+kubectl run nginx-pod --image=nginx:alpine #pod with name nginx-pod and image nginx:alpine
+
+kubectl run --help #help about run
+
+#use kubectl expose command is most cases to expose a particular pod
+#use kubectl create service command when you need to specify a node port
+
+kubectl expose pod redis --port=6379 --name=redis-service #expose on port 6379 and redis-service name
+
+kubectl create deployment webapp --image=kodekloud/webapp-color --replicas=3 #creating deployment
+
+kubectl run custom-nginx --image nginx --port 8080 #to create a deployment and expose it to a container port
+
+kubectl create deployment redis-deploy --image redis --replicas 2 --namespace dev-ns #in a specific namespace
+
+
+kubectl run httpd --image httpd:alpine --port 80 --expose true #to create a clusterip
+service/httpd created
+pod/httpd created
 ```
+
+--dry-run: By default as soon as the command is run, the resource will be created. If you simply want to test your command , use the --dry-run=client option. This will not create the resource, instead, tell you whether the resource can be created and if your command is right.
+
+-o yaml: This will output the resource definition in YAML format on screen.
+
+
+
+Use the above two in combination to generate a resource definition file quickly, that you can then modify and create resources as required, instead of creating the files from scratch.
+
+
+
+POD
+Create an NGINX Pod
+
+kubectl run nginx --image=nginx
+
+
+
+Generate POD Manifest YAML file (-o yaml). Don't create it(--dry-run)
+
+kubectl run nginx --image=nginx --dry-run=client -o yaml
+
+
+
+Deployment
+Create a deployment
+
+kubectl create deployment --image=nginx nginx
+
+
+
+Generate Deployment YAML file (-o yaml). Don't create it(--dry-run)
+
+kubectl create deployment --image=nginx nginx --dry-run=client -o yaml
+
+
+
+Generate Deployment with 4 Replicas
+
+kubectl create deployment nginx --image=nginx --replicas=4
+
+
+
+You can also scale a deployment using the kubectl scale command.
+
+kubectl scale deployment nginx --replicas=4
+
+Another way to do this is to save the YAML definition to a file and modify
+
+kubectl create deployment nginx --image=nginx --dry-run=client -o yaml > nginx-deployment.yaml
+
+
+
+You can then update the YAML file with the replicas or any other field before creating the deployment.
+
+
+
+Service
+Create a Service named redis-service of type ClusterIP to expose pod redis on port 6379
+
+kubectl expose pod redis --port=6379 --name redis-service --dry-run=client -o yaml
+
+(This will automatically use the pod's labels as selectors)
+
+Or
+
+kubectl create service clusterip redis --tcp=6379:6379 --dry-run=client -o yaml (This will not use the pods labels as selectors, instead it will assume selectors as app=redis. You cannot pass in selectors as an option. So it does not work very well if your pod has a different label set. So generate the file and modify the selectors before creating the service)
+
+
+
+Create a Service named nginx of type NodePort to expose pod nginx's port 80 on port 30080 on the nodes:
+
+kubectl expose pod nginx --type=NodePort --port=80 --name=nginx-service --dry-run=client -o yaml
+
+(This will automatically use the pod's labels as selectors, but you cannot specify the node port. You have to generate a definition file and then add the node port in manually before creating the service with the pod.)
+
+Or
+
+kubectl create service nodeport nginx --tcp=80:80 --node-port=30080 --dry-run=client -o yaml
+
+(This will not use the pods labels as selectors)
+
+Both the above commands have their own challenges. While one of it cannot accept a selector the other cannot accept a node port. I would recommend going with the kubectl expose command. If you need to specify a node port, generate a definition file using the same command and manually input the nodeport before creating the service.
+
+https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands
+
+https://kubernetes.io/docs/reference/kubectl/conventions/
+
 
 Declartive
 
@@ -725,6 +930,18 @@ spec:
     targetPort: 9376
 ```
 
+```bash
+kubectl get pods --selector env=dev #to see the pods in specific selector
+
+kubectl get pods --selector env=dev | wc -l #to have a word count
+
+kubectl get pods --selector env=dev --no-headers | wc -l #without headers
+
+ kubectl get all --selector env=prod --no-headers | wc -l #all resources in env=production
+
+kubectl get all --selector env=prod,bu=finance,tier=frontend #to select multiple labels
+```
+
 ### Taints and Toleration
 
 A node with tainted those pods have tolerations can place that in particular place.
@@ -756,6 +973,21 @@ spec:
     value:"blue"
     effect:"NoSchedule"
 ```
+
+```bash
+ kubectl taint node node01 spray=mortein:NoSchedule
+#tainting a node
+
+kubectl run bee --image nginx --dry-run=client -o yaml > bee.yaml #creating file
+
+kubectl get pods -o wide #to see more details
+
+
+controlplane ~ ➜  kubectl taint node controlplane node-role.kubernetes.io/control-plane:NoSchedule-
+node/controlplane untainted #copy the taint to remove it
+```
+
+https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
 
 tells the node which pod to be accepted
 
@@ -817,6 +1049,43 @@ requiredDuringSchedulingrequiredDuringExecution
 
 duringscheduling: it will check if node is there not during scheduling
 duringexection: important if there a change of labels of nodes
+
+pod-with-affinity-preferred-weight.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: with-affinity-preferred-weight
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/os
+            operator: In
+            values:
+            - linux
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        preference:
+          matchExpressions:
+          - key: label-1
+            operator: In
+            values:
+            - key-1
+      - weight: 50
+        preference:
+          matchExpressions:
+          - key: label-2
+            operator: In
+            values:
+            - key-2
+  containers:
+  - name: with-node-affinity
+    image: registry.k8s.io/pause:2.0
+```
+
 
 ### Taints/Tolerations and Node Affinity.
 
@@ -910,11 +1179,26 @@ spec:
     limits.memory: 10Gi
 ```
 
+```bash
+kubectl replace --force -f <file0name>
+```
+
 ### Daemon Sets
 
 Automatically added or destroyed in the pod. Daemon set is added.
 
 If you want to add a monitoring solution, Logs Viewer or any pods like that daemon set is the perfect companion for that. No need worry about adding or removing agents from the pod because daemon set will take care of that.
+
+A DaemonSet ensures that all (or some) Nodes run a copy of a Pod. As nodes are added to the cluster, Pods are added to them. As nodes are removed from the cluster, those Pods are garbage collected. Deleting a DaemonSet will clean up the Pods it created.
+
+Some typical uses of a DaemonSet are:
+
+running a cluster storage daemon on every node
+running a logs collection daemon on every node
+running a node monitoring daemon on every node
+In a simple case, one DaemonSet, covering all nodes, would be used for each type of daemon. A more complex setup might use multiple DaemonSets for a single type of daemon, but with different flags and/or different memory and cpu requests for different hardware types.
+
+
 
 replicaset-definition.yaml
 ```bash
@@ -961,6 +1245,55 @@ kubectl get daemonsets
 kubectl describe daemonsets monitoring-daemon
 ```
 
+```bash
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd-elasticsearch
+  namespace: kube-system
+  labels:
+    k8s-app: fluentd-logging
+spec:
+  selector:
+    matchLabels:
+      name: fluentd-elasticsearch
+  template:
+    metadata:
+      labels:
+        name: fluentd-elasticsearch
+    spec:
+      tolerations:
+      # these tolerations are to have the daemonset runnable on control plane nodes
+      # remove them if your control plane nodes should not run pods
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: fluentd-elasticsearch
+        image: quay.io/fluentd_elasticsearch/fluentd:v2.5.2
+        resources:
+          limits:
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+      # it may be desirable to set a high priority class to ensure that a DaemonSet Pod
+      # preempts running Pods
+      # priorityClassName: important
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+```
+
+
 ### Static Pods
 
 kubelet wait for kube-apiserver to give instruction to create cluster. What if there is no kube-apiserver or master.
@@ -971,14 +1304,19 @@ kubelet can create their on pods(pods only no replicasets/daemonsets). We can co
 
 kubelet works on pod level can only understands pods. 
 
-since static pods are depended on control plane. we can add control place etcd and everything
+since static pods are depended on control plane. we can add control plane etcd and everything
 
 `kubectl get pods -n kube-system`
 
-static pods deploy **control place** components as static pods
+static pods deploy **control plane** components as static pods
 daemonset deply monitoring agents, Logging agents on node
 
 both are ignored by the Kube-schedular
+
+```bash
+#where the kubelet configuration resides
+cat /var/lib/kubelet/config.yaml
+```
 
 ### Multiple Schedular
 

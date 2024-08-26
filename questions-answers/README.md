@@ -142,7 +142,7 @@ REVISION  CHANGE-CAUSE
 
 ```
 
-### Create a static pod named static-pod on the node01 node that uses the busybox image and the command sleep 2000.
+### 3.Create a static pod named static-pod on the node01 node that uses the busybox image and the command sleep 2000.
 
 https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/
 
@@ -208,7 +208,7 @@ NAME                READY   STATUS    RESTARTS   AGE   IP            NODE     NO
 static-pod-node01   1/1     Running   0          81s   192.168.1.4   node01   <none>           <none>
 ```
 
-### Create a new pod called super-pod with image busybox:1.28. Allow the pod to be able to set SYS_TIME. (The container should sleep for 4800seconds )(weightage: 8)
+### 4.Create a new pod called super-pod with image busybox:1.28. Allow the pod to be able to set SYS_TIME. (The container should sleep for 4800seconds )(weightage: 8)
 
 * seprate the question into 2 parts first part is to creating the pod and second part is to set SYS_TIME.
 
@@ -413,7 +413,7 @@ status:
 
 ```
 
-### Create a nginx pod called nginx-resolved using image nginx, expose it internally with a service called nginx-resolver-service. Test that you are able to look up the service and pod names from within the cluster. use the image: busybox: 1.28 for dns lookup. Record results in nginx.svc and nginx.pod (weightabe 12)
+### 5.Create a nginx pod called nginx-resolved using image nginx, expose it internally with a service called nginx-resolver-service. Test that you are able to look up the service and pod names from within the cluster. use the image: busybox: 1.28 for dns lookup. Record results in nginx.svc and nginx.pod (weightabe 12)
 
 ```bash
 
@@ -505,3 +505,12 @@ controlplane $ ls
 filesystem  nginx.pod  nginx.svc  q4.yaml  snap
 
 ```
+
+### 6.There is a multi-container Deployment in the Namespace management which seems to have issues and is not getting ready.  write the logs of all containers to /root/logs.log 
+
+```bash
+#to see the deployments in management
+kubectl get deploy -n management #management is namespace
+
+# to edit multicontainer pod and it's deployment
+kubectl edit deploy collect-data -n management
