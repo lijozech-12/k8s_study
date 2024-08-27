@@ -1316,7 +1316,13 @@ both are ignored by the Kube-schedular
 ```bash
 #where the kubelet configuration resides
 cat /var/lib/kubelet/config.yaml
+
+kubectl run static-busybox --image busybox --dry-run=client -o yaml --command -- sleep 1000 > /etc/kubernetes/manifests/static-busybox.yaml 
+
+kubectl get nodes -o wide #to find the ip address of the node
 ```
+
+simply edit the file and save it will refelct the changes
 
 ### Multiple Schedular
 
@@ -1421,8 +1427,10 @@ spec:
 ```
 
 To see logs of kubectl use.
-```
+```bash
 kubectl logs -f event-simulator-pod event-simulator
+
+kubectl logs <podname>
 ```
 
 ## Application Lifecycle Management
@@ -1431,18 +1439,22 @@ kubectl logs -f event-simulator-pod event-simulator
 
 Every time container got changes a new rollout happeing
 
-```
+```bash
 # to see the status of a deployment
 kubectl rollout status deployment/myapp-deployment
 
 # To see the history of the rollouts
 kubectl rollout history deployment/myapp-deployment
 
+#To update the image of the application to version 2, use the set image subcommand, followed by the deployment name and the new image version:
+
+kubectl set image deployments/kubernetes-bootcamp kubernetes-bootcamp=docker.io/jocatalin/kubernetes-bootcamp:v2
+
 kubectl apply -f deployment-definition.yml
 # to make changes in deployment
 
 kubectl rollout undo deployment/myapp-deployment
-# to rollout(going back) to the last change
+# to rollout(going back) to the last change 
 ```
 
 **Deployment Strategy**
@@ -1475,6 +1487,32 @@ kubectl rollout undo deployment/myapp-dep1
 
 Their will be already a replicaset is present. and another replicaset is created. Every pod is created one by one then each pod is deleted one by one. Until all the pods are duplicated.
 
+
+### command 
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: command-demo
+  labels:
+    purpose: demonstrate-command
+spec:
+  containers:
+  - name: command-demo-container
+    image: debian
+    command: ["printenv"] # way 1
+    command: ["sleep","5000"] # 3ways to define a command
+    command: #way 2
+    - "sleep"
+    - "5000"
+
+    command: ["sleep"]
+    args: ["5000"]
+    args: ["HOSTNAME", "KUBERNETES_PORT"]
+  restartPolicy: OnFailure
+```
+
 ### ENV Variables in K8s
 
 Direct way of specifying variables
@@ -1497,7 +1535,7 @@ spec:
 ```
 
 Using ConfigMap
-```
+```bash
 env:
 - name: APP_COLOR
   valueFrom:
@@ -1505,7 +1543,7 @@ env:
 ```
 
 Using Secrets
-```
+```bash
 env:
 - name: APP_COLOR
   valueFrom:
@@ -1588,6 +1626,10 @@ kubectl create secret generic \
     app-secret --from-file=app_secret.properties
 
 ```
+
+
+https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#define-container-environment-variables-using-secret-data
+
 
 declarative approach
 secret-data.yaml
@@ -1701,6 +1743,10 @@ If any of the initContainers fail to complete, Kubernetes restarts the Pod repea
 
 https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
 
+```bash
+kubectl describe pods #to see pods
+```
+
 
 ## Cluster Maintenance
 
@@ -1743,6 +1789,10 @@ apt-get upgrade -y kubelet=1.12.0-00
 systemctl restart kubelet
 
 kubectl get nodes
+
+kubeadm upgrade plan
+
+cat /etc/*release* #says the current version
 ```
 
 Steps to upgrade a node
