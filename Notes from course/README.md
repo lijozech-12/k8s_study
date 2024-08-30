@@ -1836,6 +1836,19 @@ kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
 # backup using kube apiserver
 kubectl get all --all-namespaces -o yaml > all-deploy-services.yaml
 
+k get pods -n kube-system #to see pods in the kube-system namespace.
+k describe pods etcd-controlplane -n kube-system #to see the details of controlplane componenets.
+#if it is using the external url it's using external etcd
+
+
+ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 \
+  --cacert=<trusted-ca-file> --cert=<cert-file> --key=<key-file> \
+  snapshot save <backup-file-location>
+#where trusted-ca-file, cert-file and key-file can be obtained from the description of the etcd Pod.(previous two commands)
+
+ cat /etc/kubernetes/manifests/etcd.yaml #to see a file and the details
+
+
 # we can also backup using etcd
 #ETCD cluster backupt. It is hosted in etcd cluster
 # It will backup the snapshot
@@ -1860,13 +1873,23 @@ service kube-apiserver start
 ETCDCTL_API=3 etcdctl \
     snapshot save snapshot.db \
 
+ETCDCTL_API=3 etcdctl member list
+
+etcdutl --data-dir <datadirlocation> snapshot restore snapshot.db
+
+kubectl config use-context cluster1 #to switch to cluster of specific context
+
+#Restoring etcd cluster. we need to use the data we restored and restore it into a folder and give that location to etcd.yaml file.
+#change the hostpath of etcd-data to the folder we created. it will restarte
+#volumemount and --data-dir path should match everytime.
+```
 https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/#backing-up-an-etcd-cluster
 
 https://github.com/etcd-io/website/blob/main/content/en/docs/v3.5/op-guide/recovery.md
 
 https://www.youtube.com/watch?v=qRPNuT080Hk
 
-```
+
 
 
 ## Security
@@ -1893,6 +1916,8 @@ kubectl list users
 # Since the passwords and all managed by third party like LDAP
 
 kubectl create serviceaccount sa1 #to create service accounts
+
+
 ```
 
 all the request from admin or developers goes throught kube-apiserver and it's Authenticate User before processing the request.
@@ -2188,6 +2213,13 @@ roleRef:
 
 ```bash
 #create the role bindings using
+kubectl create role --help
+kubectl create role developer --verb=list,create,delete --resource=pods
+
+kubectl --as dev-user get pod dark-blue-app -n blue
+
+kubectl create rolebinding --help
+kubectl create rolebinding dev-user-binding --role=developer --user=dev-user
 kubectl create -f devuser-developer-binding.yaml
 ```
 
@@ -2254,6 +2286,8 @@ kubectl api-resources --namespaced=true
 #to see the cluster scoper resources full list
 
 kubectl api-resources --namespaced=false
+
+kubectl create clusterrole michelle-role --verb=get,list,watch --resource=node
 ```
 
 How to authroize users to use cluster wide resources. like node or persistent volumes.
@@ -2297,6 +2331,8 @@ roleRef:
 Creting cluster bindings.
 ```bash
 kubectl create -f cluster-admin-role-binding.yaml
+
+kubectl api-resources #to know the more details of resources
 ```
 
 
@@ -2328,6 +2364,8 @@ kubectl describe serviceaccount dashboard-sa
 
 #to view the token run and use that token for authentications 
 kubectl describe secret <name of secrete> # ex dashboard-sa-token-kbbdm
+
+kubectl create token dashboard-sa #to create toekn for dashboard-sa serviceaccount
 
 ```
 
