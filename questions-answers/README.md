@@ -1315,7 +1315,7 @@ it means we need to implement a network policy.
 
 install telnet 
 ```bash
-k exec <pod name> --   sh -c "apt-get update"
+k exec <pod name> -- sh -c "apt-get update"
 k exec <pod name> -- sh -c "apt-get install -y telnet"
 
 k exec <pod-name> telnet <ip-addr> <port> #see if you can connect from one pod to another in this.
@@ -1497,3 +1497,228 @@ systemctl start kubelet #in case if it don't work restart
 ```
 
 ### 34. Please join node01 worker node to the cluster, and you have to deploy a pod in the node01, pod name should be web and image should be nginx. (weightage 6)
+
+Search for token in the k8s documentation. You will get token command to run in the documentation.
+
+search for kubeadm token or token join
+
+https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-token/
+
+```bash
+k get nodes #to check available nodes
+
+#we need to run a command to join node into our cluster
+# we will be outside from the cluster in the exam. we need ssh into the master to run this command
+
+ssh controlplane
+
+kubeadm token create --print-join-command # we will get a joining token
+# run this command in the node01. 
+# the node will join the cluster
+# restart the kubelet if you face issue
+systemctl start kubelet
+
+# tehn run 
+k get nodes #to check whether it connected or not.
+
+k run web --image=nginx
+```
+
+### 35. There was a security incident where an intruder was able to access the whole cluster from a single hacked web pod. To prevent this create a NetworkPolicy in default Namespace. It should allow the web-* pods only to: connect to service-* Pods on port 8080. After Implementation, connections from web-* Pods to application-* Pods on port 80 should also be blocked. (weightage 6)
+
+
+```bash
+k get pd #to get pods
+k exec <web-pod-name> --telnet <ip-addr-pods> <portnumber> #to connection from webpod to other pds
+
+k get po --show-labels #to see the labels of pod #we need labels for network policies
+
+k apply -f network-policy.yaml #to create network policy using below pods
+
+k get networkpolicy #to check policies
+
+#then check the connectivity after this
+
+```
+
+network-policy.yaml
+```bash
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: netpolicy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: web #since we are controlling network out of web pods
+  policyTypes:
+  - Egress #we only need egress rules
+  egress:
+  - to:
+    - podSelector:
+       matchLabels:
+          app: service  #only allowing connection to service from web
+    ports:
+    - protocol: TCP
+      port: 8080
+```
+
+### 36. Create a new ServiceAccount gitops in Namespace project-1. Create a Role and RoleBinding, both named gitops-role and gitops-rolebinding as well. These should allow the new SA to only create Secrets and ConfigMaps in that Namespace. (5% weightage)
+
+
+```bash
+k get ns #to check namespaces. Create it if it's not present
+
+k create sa gitops -n project-1 #create service account named gitops in project-1 namespace
+
+k get sa -n project-1 #to get service account in the project-1 namespace
+
+k create role gitops-role --verb=create --resource=secrets,configmaps #allowing only to creat secrets,configmaps in resource namespace.
+
+k get role -n project-1 #to see the roles
+
+k describe role -n project-1 #to see details of roles. It will help you identify any mistakes.
+
+# now we need to create rolebindings to connecting it with roles.
+
+k create rolebinding -n project-1 gitops-rolebinding --role=gitops-role --serviceaccount=project-1:gitops
+
+#--serviceaccount=namespace:serviceaccount name
+
+k get rolebinding -n project-1 #to see the roles
+
+#to check if it's working or not
+
+k -n project-1 auth can-i create pod --as system:servcieaccount:project-1:gitops #permission to create pod in project-1 namespace
+
+k -n project-1 auth can-i create configmap --as system:servcieaccount:project-1:gitops #creating configmap in project-1 namespace
+```
+
+### 37. There are two existing Deployments in Namespace world which should be made accessible via an Ingress. First: create clusterIP services for both Deployments for port 80. The Service should have the same name as the Deployments.
+
+```bash
+k get deploy -n world
+
+k expose deply asia -n world --port=80 #to create service for deployment
+
+cat /etc/hosts #to see the host entry in the namespace
+
+k get ingressclass #to see ingress class name
+
+k get ingress -n world #to check ingress rules
+
+curl <ip address> #to see if you are able see the address
+
+```
+
+go to documentation and search for ingress. 
+https://kubernetes.io/docs/concepts/services-networking/ingress/ 
+
+ingress.yaml
+```bash
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: world
+  namespace: world #ingress resources are name spaced so we need specify those names.
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx #by running k get ingressclass
+  rules:
+  - host: "world.universe.mine" #copy and paste the domain name
+    http:
+      paths:
+      - path: /europe #path should be this
+        pathType: Prefix
+        backend:
+          service:
+            name: europe #the service should be europe
+            port:
+              number: 80
+      - path: /asia #path should be this
+        pathType: Prefix
+        backend:
+          service:
+            name: asia #the service should be europe
+            port:
+              number: 80
+```
+
+### 38. Use Namespace project-1 for the following. Create a DaemonSet named daemon-imp wiht image httpd:2.4-alpine and labels id=daemon-imp and uuid=18426a0b-5f59-4e10-923f-c0e078e82462. The Pods it creates should request 20 millicore cpu and 20 mebibyte memory. The Pods of that DaemonSet should run on all nodes, also controlplanes (weightage = 5%)
+
+search for daemonset in k8s documentation.
+https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
+
+
+daemonset.yaml
+```bash
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: daemon-imp
+  namespace: project-1
+  labels:
+    id: daemon-imp
+    uuid: 18426a0b-5f59-4e10-923f-c0e078e82462
+spec:
+  selector:
+    matchLabels:
+      id: daemon-imp
+      uuid: 18426a0b-5f59-4e10-923f-c0e078e82462
+  template:
+    metadata:
+      labels:
+        id: daemon-imp
+        uuid: 18426a0b-5f59-4e10-923f-c0e078e82462
+    spec:
+      tolerations:
+      # these tolerations are to have the daemonset runnable on control plane nodes
+      # remove them if your control plane nodes should not run pods
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: daemon-imp #not mentioned
+        image: httpd:2.4-alpine
+        resources:
+          requests:
+            cpu: 20m
+            memory: 20Mi
+```
+
+```bash
+k apply <nameoffile>.yaml
+
+k create ns project-1
+
+k get ds -n project-`
+```
+
+### 39. ETCD backup
+
+search for etcd snapshot in documentation
+
+https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/#backing-up-an-etcd-cluster
+
+```bash
+cat /etc/kubernets/manifest/etcd.yaml #find the details 
+
+ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 \
+  --cacert=<trusted-ca-file> --cert=<cert-file> --key=<key-file> \
+  snapshot save <backup-file-location>  #fill this
+
+
+etcdutl --data-dir <data-dir-location> snapshot restore snapshot.db #to take backup
+```
+
+### 40. Create a snapshot of ETCD and save it to /root/backup/etcd-backup-new.db. you can use the below certificates for taking the snapshot. (CA certificate: /root/certificates/ca.crt, Client certificate: /root/certificates/server.crt, key: /root/certificates/server.key). restore an old snapshot located at /root/backup. 
+
+ Like the eralier questions.
+
+
+### 41. You can find a pod named multi-container-pod running in the cluster, take the cont
