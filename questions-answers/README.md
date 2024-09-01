@@ -1721,4 +1721,55 @@ etcdutl --data-dir <data-dir-location> snapshot restore snapshot.db #to take bac
  Like the eralier questions.
 
 
-### 41. You can find a pod named multi-container-pod running in the cluster, take the cont
+### 41. You can find a pod named multi-container-pod running in the cluster, take the container logs and the container id of the c2 container and save it into the below mentioned location. Restart the C2 container and write the cluster events to the /root/event.log file. Log save to /root/logs.txt, Container id to /root/id.txt (4).
+
+```bash
+k get pods 
+
+k logs multi-container-pod -c c2 >> /root/log.txt #to storing logs into a file.
+
+#to run the container id login into node01. 
+crictl ps #since docker commands won't work. you will get container id's. copy the respective one and save it in /root/id.txt file.
+
+#for saving events after restarting c2 containers.
+#go to node01
+crictl stop <container-id>
+crictl rm <container-id>
+
+#go back 
+
+kubectl get events --sort-by=.metadata.creationTimestamp > /root/logs.txt
+
+#to get event logs of pods
+kubectl get events --field-selector involvedObject.name=multi-container-pod
+```
+
+run kubectl quick reference/ kubectl cheat sheet
+
+https://kubernetes.io/docs/reference/kubectl/quick-reference/
+
+search for events in it
+
+### 42. Find the Pod with the highest priority in Namespace management and delete it.
+
+```bash
+k get po -n management #to list pods in management cluster.
+
+k edit po -n management <pod-name> #to find the priorities
+
+#there will be priority and priority classname
+# highest number in priority and priority classname can be deleted.
+
+k get priorityclass #to see the prioriyclass
+
+k -n management get pod -o yaml | grep -i priority -B 20 #to get priority class with 20 lines before priority. this is the right way of doing it.
+
+k delete po <pod-name> -n management #delete the second pod
+```
+
+### 43. In Namespace lion there is one existing pod which requests 1Gi of memory resources. That Pod has a specific priority because of its PriorityClass. Create new Pod named important of image nginx:1.21.6-alpine in the Namespace. It should request 1Gi memory resources. Assign a higher priority to the new Pod so it's scheduled instead of the existing one. Both pods won't fit in the cluster.
+
+
+
+
+
