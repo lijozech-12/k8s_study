@@ -1770,6 +1770,286 @@ k delete po <pod-name> -n management #delete the second pod
 ### 43. In Namespace lion there is one existing pod which requests 1Gi of memory resources. That Pod has a specific priority because of its PriorityClass. Create new Pod named important of image nginx:1.21.6-alpine in the Namespace. It should request 1Gi memory resources. Assign a higher priority to the new Pod so it's scheduled instead of the existing one. Both pods won't fit in the cluster.
 
 
+```bash
+ k get po -n lion #to see pods
+
+k edit pod <pod-name> -n lion #to see the priority and priority class
+
+k run important -n lion --image=nginx:1.21.6-alpine --dry-run=client -o yaml > 43.yaml
+#to create the important file
+
+k get priorityclasses #to see the important priority classes.
+k edit po <pod-name> -n lion #edit the priorityclasses
+```
+
+https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/  search for priority add `priorityClassName:`
+
+search for resource and request
+https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+
+```bash
+    resources:
+      requests:
+        memory: "64Mi" #this request should be 1Gi
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+```
+
+To create a priorityclass. Search for priorityclass in documentation.
+
+pc.yaml
+```bash
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: level4
+value: 4000000000
+globalDefault: false
+description: "This priority class should be used for XYZ service pods only."
+```
+to create priorityclass `kubectl apply -f pc.yaml`
 
 
+### 44. Create a replicaset with below specifications. (Name=web-app, Image=nginx, Replicas=3). Please note, there is already a pod running in our cluster named web-frontend, please make sure the total number of pods running in the cluster is not more than 3. (weightage 4).
+
+```bash
+
+#to add replicaset to already exisiting pods.
+kubectl get po #to get details of pod
+
+kubect edit po frontend #to see the labels. We need those labels to add pod to the replicaset.
+# there is one label named `tier: frontend`.
+
+k create deploy web-app --image=nginx --dry-run=client -o yaml > replicaset.yaml
+#creating deploy file helps to create replicasets easily. Since we need to just change the kind.
+
+k get pods #to see the replicasets
+```
+
+replicaset.yaml
+```bash
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  creationTimestamp: null
+  labels:
+    tier: frontend
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      tier: frontend
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        tier: frontend
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources: {}
+status: {}
+```
+
+### 45. Create a ConfigMap named trauerweide with content tree=trauerweide. Create the ConfigMap stored in existing file /root/cm.yaml
+
+
+```bash
+controlplane $ kubectl create configmap trauerweide --from-literal=tree=trauerweide
+configmap/trauerweide created
+controlplane $ k get cm
+NAME               DATA   AGE
+kube-root-ca.crt   1      30d
+trauerweide        1      9s
+controlplane $ ls
+cm.yaml  filesystem  snap
+controlplane $ kubectl create -f cm.yaml 
+configmap/birke created
+controlplane $ k get cm\
+> ^C
+controlplane $ k get cm 
+NAME               DATA   AGE
+birke              3      7s
+kube-root-ca.crt   1      30d
+trauerweide        1      30s
+controlplane $ 
+```
+
+### 46. Create a Pod named pod1 of image nginx:alpine. Make key tree of ConfigMap trauerweide available as environment variable TREE1, Mount all keys of ConfigMap birke as volume. The files should be available under /etc/birke/*, Test env+volume access in the running Pod
+
+search for configmaps in the documentation
+https://kubernetes.io/docs/concepts/configuration/configmap/ 
+
+pod.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: pod1
+  name: pod1
+spec:
+  containers:
+  - image: nginx:alpine
+    name: pod1
+    env:
+        # Define the environment variable
+        - name: TREE1 # Notice that the case is different here
+                        # from the key name in the ConfigMap.
+          valueFrom:
+            configMapKeyRef:
+              name: trauerweide         # The ConfigMap this value comes from.
+              key: tree
+    volumeMounts:
+    - name: birke
+      mountPath: etc/birke
+  volumes:
+  # You set volumes at the Pod level, then mount them into containers inside that Pod
+  - name: birke
+    configMap:
+      # Provide the name of the ConfigMap you want to mount.
+      name: birke
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+```
+
+```bash
+controlplane $ k run pod1 --image=nginx:alpine --dry-run=client -o yaml > pod.yaml
+controlplane $ ls
+cm.yaml  filesystem  pod.yaml  snap
+
+k apply -f pod.yaml
+
+#to check everything
+controlplane $ kubectl exec pod1 -- env | grep "TREE1=trauerweide"
+TREE1=trauerweide
+controlplane $ kubectl exec pod1 -- cat /etc/birke/tree
+birke
+controlplane $ kubectl exec pod1 -- cat /etc/birke/level
+3
+controlplane $ kubectl exec pod1 -- cat /etc/birke/department
+park
+```
+
+### 47. List the pods in the safari Namespace, sorted by creation time and save the command to the below path. /root/pods_timestamp.txt (weight 2).
+
+```bash
+k get po -n safari
+
+k get po -n safari --sort-by=.metadata.creationTimestamp
+#to sort by creation timestamp
+
+k get po -n safari --sort-by=.metadata.creationTimestamp | tac #for ascending order
+
+#copy and save the command in the file
+#mention in full name kubectl
+
+kubectl get pods -n safari --sort-by=.spec.priority #to sort it by priority
+
+
+### 48. Create a new deployment named 'web' using the 'nginx:1.16' image with 3 replicas. Ensure that no pods are scheduled on the node named 'kworker'. (weightage 4).
+
+```bash
+#use the cordon command to make the node unschedulable
+kubectl cordon kworker
+
+kubectl create deploy web --image=nginx:1.16 --dry-run=client -o yaml > deploy.yaml
+
+#then edit the deployement replicas
+
+k apply -f deploy.yaml
+
+k get po -o wide #to check the pods
+
+kubectl uncordon kworker #to enable scheduling
+```
+
+deploy.yaml
+```bash
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: web
+  name: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: web
+    spec:
+      containers:
+      - image: nginx:1.16
+        name: nginx
+        resources: {}
+status: {}
+```
+
+`kubectl apply -f deploy.yaml`
+
+### 48. Mark the worker node named kworker as unschedulable and reschedule all the pods running on it. (weightage 6)
+
+```bash
+kubectl get pods -o wide
+
+kubectl cordon kworker
+
+kubectl drain --ignore-daemonsets kworker
+```
+
+
+### 49. Given an existing kubernetes cluster running version 1.26.0, upgrade the master node and worker node to version 1.27.0. Be sure to drain the master and worker node before upgrading it and uncordon it after the upgrade. weightage = 12%.
+
+search for upgrade in k8s documentation. Read the below documentation
+https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/ 
+
+
+must asking and practice it. most weightage question
+
+### 50. Add an init container named init-container (which has been defined in  spec file /home/master/opt/web-pod.yaml). The init container should create an empty file named /workdir/conf.txt. If /workdire/conf.txt is not detected, the pod should exit. Once the spec file has been updated with the init container definition, the pod should be created. (weightage = 4%)
+
+search for init in documentation
+
+https://kubernetes.io/docs/concepts/workloads/pods/init-containers/ 
+
+init.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myapp-pod
+  labels:
+    app.kubernetes.io/name: MyApp
+spec:
+  volumes:
+  - name: workdir
+    emptyDir:
+  containers:
+  - name: web-pod
+    image: alpine
+    command: ['sh', '-c', 'if [-f /workdir/conf.txt]; then sleep 10000; else exit 1; fi']
+    volumentMounts:
+    - name: workdir
+      mountPath: /workdir
+  initContainers:
+  - name: init-myservice
+    image: busybox:1.28
+    command: ['sh', '-c', 'touch /workdir/conf.txt']
+    volumentMounts:
+    - name: workdir
+      mountPath: /workdir
+```
 
