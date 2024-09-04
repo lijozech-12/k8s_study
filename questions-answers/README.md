@@ -1951,7 +1951,7 @@ k get po -n safari --sort-by=.metadata.creationTimestamp | tac #for ascending or
 #mention in full name kubectl
 
 kubectl get pods -n safari --sort-by=.spec.priority #to sort it by priority
-
+```
 
 ### 48. Create a new deployment named 'web' using the 'nginx:1.16' image with 3 replicas. Ensure that no pods are scheduled on the node named 'kworker'. (weightage 4).
 
@@ -2052,4 +2052,420 @@ spec:
     - name: workdir
       mountPath: /workdir
 ```
+
+### 51. Create a namespace finance, and Create a NetworkPolicy that blocks all traffic to pods in finance namespace, except for traffic from pods in the same namespace on port 8080.
+
+
+```bash
+kubectl create namespace finance #create the namespace
+
+kubectl label namespace finance app=finance #to label the namespace
+
+kubectl get namespace finance --show-labels #to show labels
+
+kubectl create -f <filename>
+```
+
+go to documentaion and search for network policies
+
+networkpolicy.yaml
+```bash
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: finance
+  namespace: finance
+spec:
+  podSelector: {} #all pods in the finance namespace
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          app: finance d
+    ports:
+    - protocol: TCP
+      port: 8080
+```
+
+### 52. Create a NetworkPolicy that denies all access to the payroll Pod in the accounting namespace
+
+```bash
+
+kubectl get pods -n accounting
+kubectl get pods -n accounting --show-labels
+kubectl create -f payroll-policy.yaml
+```
+
+go to documentation and search for network policy
+https://kubernetes.io/docs/concepts/services-networking/network-policies/
+
+payroll-policy.yaml
+```bash
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: payroll-policy
+  namespace: accounting
+spec:
+  podSelector:
+    matchLabels:
+      app: payroll
+  policyTypes:
+  - Ingress
+  - Egress
+```
+
+### 53. Install and configure a 3 nodes kubernetes cluster with kubeadam
+
+https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+search for installing kubeadm
+
+https://www.youtube.com/watch?v=IQtrNRIW0uQ&list=PLkDIJDlFRu0xVERZaAfMXB6pg28FNH4Nk&index=4&pp=iAQB
+
+```bash
+lsb_release -a
+```
+
+### 54. Troubleshoot a kubernetes cluster. Explore the cluster, determine and fix the issue.
+
+
+```bash
+k get nodes
+k describe nodes <node-name> #you will see kubelet stopped working
+
+ssh <node-name> 
+
+journalctl -u kubelet #to get logs of kubelet
+
+sudo systemctl start kubelet #to restart the kubelet
+
+sudo systemctl enable
+
+sudo systemctl start kubelet
+
+sudo systemctl status kubelet
+
+```
+
+### 55. Deployment named nginx-deployment is created in the default namespace, scale the deployment to 8 replicas.
+
+```bash
+kubectl scale deploy nginx-deployment --replicas=8
+```
+
+### 56.Create pod named multicontainer with multiple containers. redis + nginx
+
+
+```bash
+kubectl run multicontainer --image=nginx --dry-run=client -o yaml > 1.yaml
+
+```
+
+muliti.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: multicontainer
+  name: multicontainer
+spec:
+  containers:
+  - image: nginx
+    name: multicontainer
+  - image: redis
+    name: redis
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+```
+
+### 57. Make the node k8s-worker1 unschedulable and reschedule the pods running on it.
+
+```bash
+kubectl cordon <node-name> #to make unschedulable
+
+kubectl drain <node-name> --ignore-daemonsets#to reschedule the nodes
+```
+
+### 58. Create a deployment named nginx-deploy in the default namespace using the image nginx:1.18, with 2 replicas. Perform a rolling deployment to update the image to nginx:1.19 and record this change. Scale the deployment to 4 replicas.
+
+Search for deployment in documentation 
+
+https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+
+search documentation for record in deployments page
+
+dp.yaml
+```bash
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deploy
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.18
+        ports:
+        - containerPort: 80
+
+```
+
+```bash
+controlplane $ k apply -f dp.yaml 
+deployment.apps/nginx-deploy created
+controlplane $ k get deployments.apps 
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deploy   0/2     2            0           6s
+controlplane $ k get deployments.apps 
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deploy   2/2     2            2           11s
+
+kubectl set image deployment/nginx-deploy nginx=nginx1.19 --record #for recording a change
+
+kubectl rollout status deployment/nginx-deploy
+
+kubectl sclae deployment nginx-deploy --replicas=4
+
+kubectl get deploy
+```
+
+### 59. Run a pod using the image redis and ensure the pod is run on each worker node.
+
+search for daemonsets
+https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
+
+```bash
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: redis
+spec:
+  selector:
+    matchLabels:
+      name: redis
+  template:
+    metadata:
+      labels:
+        name: redis
+    spec:
+      containers:
+      - name: redis
+        image: quay.io/fluentd_elasticsearch/fluentd:v2.5.2
+```
+
+### 60. Create a static pod on the worker node k8s-worker1 using the image nginx
+
+create a pod.yaml file for it and save it in /etc/kubernetes/manifests/pod.yaml inside the specific node
+
+find the config file of kublet and find the static pod path. then create a pod.yaml file in it
+```bash
+ps -aux | grep kubelet
+```
+
+### 61. Create a new pod called web-pod with image busybox Allow the pod to be able to set system_time. The container should sleep for 3200 seconds. (7%)
+
+We need to search for system capabilites in the documentation.
+https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
+```bash
+kubectl run web-pod --image=busybox --command sleep 3200 --dry-run=client -o yaml > pod.yaml #to create the file
+
+
+```
+
+pod.yaml
+```bash
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: web-pod
+  name: web-pod
+spec:
+  containers:
+  - command:
+    - sleep
+    - "3200"
+    image: busybox
+    name: web-pod
+    securityContext:
+      capabilities:
+        add: ["SYS_TIME"] #it's from searching time in security context file
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+```
+
+### 62. Create a new deployment called myproject, with image nginx:1.16 and ​1 replica. Next upgrade the deployment to version 1.17 using rolling​ update​. Make sure that the version upgrade is recorded in the resource annotation.​
+
+```bash
+
+controlplane $ k create deployment myproject --image nginx:1.16 --replicas 1
+deployment.apps/myproject created
+
+controlplane $ k set image deployment/myproject nginx=nginx1.17 --record
+Flag --record has been deprecated, --record will be removed in the future
+deployment.apps/myproject image updated
+
+#nginx=nginx1.17 nginx is container name. and set command will do a rolling update
+
+#to check if it's worked or not
+controlplane $ k describe deployments.apps myproject 
+Name:                   myproject
+Namespace:              default
+CreationTimestamp:      Wed, 04 Sep 2024 17:00:49 +0000
+Labels:                 app=myproject
+Annotations:            deployment.kubernetes.io/revision: 2
+                        kubernetes.io/change-cause: kubectl set image deployment/myproject nginx=nginx1.17 --record=true
+Selector:               app=myproject
+Replicas:               1 desired | 1 updated | 2 total | 1 available | 1 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=myproject
+  Containers:
+   nginx:
+    Image:         nginx1.17
+    Port:          <none>
+    Host Port:     <none>
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    ReplicaSetUpdated
+OldReplicaSets:  myproject-6777d8b55f (1/1 replicas created)
+NewReplicaSet:   myproject-77879bc788 (1/1 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  3m7s  deployment-controller  Scaled up replica set myproject-6777d8b55f to 1
+  Normal  ScalingReplicaSet  74s   deployment-controller  Scaled up replica set myproject-77879bc788 to 1
+
+
+
+#to see the history
+controlplane $ kubectl rollout history deployment myproject 
+deployment.apps/myproject 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         kubectl set image deployment/myproject nginx=nginx1.17 --record=true
+
+```
+
+### 63. Create a new deployment called my-deployment. Scale the deployment to 3 replicas.   Make sure desired number of pod always running. 
+
+```bash
+controlplane $ k create deployment my-deployment --image=nginx --replicas 3
+deployment.apps/my-deployment created
+
+controlplane $ k get deployments.apps 
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+my-deployment   3/3     3            3           15s
+```
+
+### 64. Deploy a web-nginx pod using the nginx:1.17 image with the labels set to tier=web-app.
+
+```bash
+controlplane $ k run web-nginx --image=nginx:1.17 --labels="tier=web-app"
+pod/web-nginx created
+```
+
+### 67.  Create a static pod on node01 called static-pod with image nginx and you     have to make sure that it is recreated/restarted automatically in case ​of any failure happens
+
+static pod is pod that associated with a default kubelet or pods.
+
+
+```bash
+
+node01 $ ps aux | grep kubelet #to find the config of kublet
+root        1188  0.6  4.5 1927452 92920 ?       Ssl  16:38   0:15 /usr/bin/kubelet --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf --config=/var/lib/kubelet/config.yaml --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9 --container-runtime-endpoint unix:///run/containerd/containerd.sock --cgroup-driver=systemd --eviction-hard imagefs.available<5%,memory.available<100Mi,nodefs.available<5% --fail-swap-on=false
+
+
+#--config=/var/lib/kubelet/config.yaml this is the default location
+
+node01 $ cat /var/lib/kubelet/config.yaml | grep static
+staticPodPath: /etc/kubernetes/manifests #this will show the static pod location
+
+#create a pod yaml and place it inside this location it will become a static pod
+
+# run this command and create a yaml file and copy that into static pod location
+controlplane $ k run static-pod --image=nginx --dry-run=client -o yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: static-pod
+  name: static-pod
+spec:
+  containers:
+  - image: nginx
+    name: static-pod
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+```
+
+### 68. Create a pod called pod-multi with two containers, as given below:​
+Container 1 - name: container1, image: nginx​
+Container2 - name: container2, image: busybox, command: sleep 4800​
+
+```bash
+
+#first create one container and add the second one
+
+kubectl run pod-multi --image=nginx --dry-run=client -o yaml >> pod.yaml
+
+#then add the second container
+```
+
+pod.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: pod-multi
+  name: pod-multi
+spec:
+  containers:
+  - image: nginx
+    name: pod-multi
+  - name: hello
+    image: busybox
+    command: ['sh', '-c', 'sleep 4800']
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+```
+
+
+### 69. Create a pod called test-pod in "custom" namespace belonging to the test environment (env=test) and backend tier (tier=backend).​ image: nginx:1.17​
+
+
 
