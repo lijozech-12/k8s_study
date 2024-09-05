@@ -2324,6 +2324,8 @@ controlplane $ k set image deployment/myproject nginx=nginx1.17 --record
 Flag --record has been deprecated, --record will be removed in the future
 deployment.apps/myproject image updated
 
+kubectl annotate #since --record is depreciated
+
 #nginx=nginx1.17 nginx is container name. and set command will do a rolling update
 
 #to check if it's worked or not
@@ -2467,5 +2469,545 @@ status: {}
 
 ### 69. Create a pod called test-pod in "custom" namespace belonging to the test environment (env=test) and backend tier (tier=backend).​ image: nginx:1.17​
 
+```bash
 
+kubectl get namespaces #to check whether the namespace is present or not.
+
+kubectl create namespace custom #the namespace name should be custom
+```
+
+pod.yaml
+```bash
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: test-pod
+    env: test
+    tier: backend
+  name: test-pod
+  namespace: custom
+spec:
+  containers:
+  - image: nginx:1.17
+    name: test-pod
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+```
+
+### 70.  Get the node node01 in JSON format and store it in a file at ​ ./node-info.json​
+
+```bash
+k get nodes
+
+k get nodes node01 -o json > ./node-info.json #to get node details #can get from kubectl cheatsheet
+```
+
+### 71. Use JSON PATH query to retrieve the oslmages of all the nodes and store it in a file “all-nodes-os-info.txt” at root location.​ (Note: The osImage are under the nodeInfo section under status of each node.​)
+
+go to k8s documentation under kubectl cheatsheet. You will see something like this
+```bash
+
+# Get ExternalIPs of all nodes
+kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="ExternalIP")].address}'
+
+# List Names of Pods that belong to Particular RC
+
+kubectl get node -o json #to get all the details in json format
+
+controlplane $ kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.osImage}' > all-node-os-info.txt
+controlplane $ cat all-node-os-info.txt 
+Ubuntu 20.04.5 LTS Ubuntu 20.04.5 LTScontrolplane $ 
+```
+
+### 72.Create a Persistent Volume with the given specification.​ Volume Name: pv-demo​ Storage:100Mi​ Access modes: ReadWriteMany​ Host Path: /pv/host-data​
+
+search for pv in documentation
+
+```bash
+controlplane $ cat pv1.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-demo
+spec:
+  capacity:
+    storage: 100Mi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /pv/host-data
+controlplane $ k apply -f pv1.yaml 
+persistentvolume/pv-demo created
+controlplane $ k get pv
+NAME      CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+pv-demo   100Mi      RWX            Retain           Available                          <unset>                          4s
+```
+
+### 73. Worker Node “node01” not responding, Debug the issue and fix it.​
+
+```bash
+#go to node01 by doing ssh 
+ssh node01
+#if we were unable to ssh then it's an issue with unreachability of network
+
+#other issue will be kubelet not running
+ps aux | grep kubelet
+
+journactl -xe #to see the error in the kubectl
+
+#to see the configuration of kubelet go to
+ls /etc/kubernetes/kubelet.conf
+
+#client certificat and client-key should be in lib directory.
+
+    client-certificate: /var/lib/kubelet/pki/kubelet-client-current.pem
+    client-key: /var/lib/kubelet/pki/kubelet-client-current.pem
+#like above
+# check the location
+
+systemctl restart kubelet #to restart the kubelet
+
+ps aux | grep kubelet #to check
+
+```
+
+### 74. Upgrade the Cluster (Master and worker Node) from 1.18.0 to 1.19.0. Make sure to first drain both Node and make it available after upgrade.​ (most important question)
+
+https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
+
+
+### 75. Take a backup of the ETCD database and save it to “/opt/etcd-backup.db” . Also restore the ETCD database from the backup​
+
+https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/#securing-etcd-clusters
+
+```bash
+
+ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 \
+  --cacert=<trusted-ca-file> --cert=<cert-file> --key=<key-file> \
+  snapshot save <backup-file-location>
+
+k describe pods -n kube-system etcd-controlplane #to get the details of ca, cert, key
+
+#or the easiest way
+cat /etc/kuberenetes/manifests/etcd.yaml | grep file
+
+#example command 
+ETCDCTL_API=3 etcdctl --endpoints=https://172.30.1.2:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kube
+rnetes/pki/etcd/server.key --key=/etc/kubernetes/pki/etcd/server.key snapshot save /opt/etcd-backup.db
+
+
+#to check the snapshot
+controlplane $ etcdctl --write-out=table snapshot status /opt/etcd-backup.db 
+Deprecated: Use `etcdutl snapshot status` instead.
+
++---------+----------+------------+------------+
+|  HASH   | REVISION | TOTAL KEYS | TOTAL SIZE |
++---------+----------+------------+------------+
+| 14f13e5 |     2870 |       2201 |     4.2 MB |
++---------+----------+------------+------------+
+
+
+etcdutl --data-dir <data-dir-location> snapshot restore snapshot.db
+
+etcdutl --data-dir /var/lib/etcd-backup snapshot restore /opt/etcd-backup.db
+#then we need to go to the
+# datadir is where we restore the data
+
+
+cd /etc/kubernetes/manifests
+vi etcd.yaml #to edit it after restoration
+
+# then change the hostpath to /var/lib/etcd-backup that's where we restored the data
+```
+
+### 76. Create a new user “ajeet”. Grant him access to the cluster. User “ajeet” should have permission to create, list, get, update and delete pods. The private key exists at location:​ /root/ajeet/.key and csr at /root/ajeet.csr
+
+search for csr in kubernetes documentation. You will get a page like this below
+https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/
+
+
+```bash
+openssl genrsa -out /root/ajeet.key 2048 #to create private key
+
+openssl req -new -key /root/ajeet.key -out /root/ajeet.csr -subj "/CN=ajeet"
+
+controlplane $ ls
+ajeet.csr  ajeet.key  filesystem  snap
+
+#create a certificate signing request
+
+cat <<EOF | kubectl apply -f -
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: myuser
+spec:
+  request: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ1ZqQ0NBVDRDQVFBd0VURVBNQTBHQTFVRUF3d0dZVzVuWld4aE1JSUJJakFOQmdrcWhraUc5dzBCQVFFRgpBQU9DQVE4QU1JSUJDZ0tDQVFFQTByczhJTHRHdTYxakx2dHhWTTJSVlRWMDNHWlJTWWw0dWluVWo4RElaWjBOCnR2MUZtRVFSd3VoaUZsOFEzcWl0Qm0wMUFSMkNJVXBGd2ZzSjZ4MXF3ckJzVkhZbGlBNVhwRVpZM3ExcGswSDQKM3Z3aGJlK1o2MVNrVHF5SVBYUUwrTWM5T1Nsbm0xb0R2N0NtSkZNMUlMRVI3QTVGZnZKOEdFRjJ6dHBoaUlFMwpub1dtdHNZb3JuT2wzc2lHQ2ZGZzR4Zmd4eW8ybmlneFNVekl1bXNnVm9PM2ttT0x1RVF6cXpkakJ3TFJXbWlECklmMXBMWnoyalVnald4UkhCM1gyWnVVV1d1T09PZnpXM01LaE8ybHEvZi9DdS8wYk83c0x0MCt3U2ZMSU91TFcKcW90blZtRmxMMytqTy82WDNDKzBERHk5aUtwbXJjVDBnWGZLemE1dHJRSURBUUFCb0FBd0RRWUpLb1pJaHZjTgpBUUVMQlFBRGdnRUJBR05WdmVIOGR4ZzNvK21VeVRkbmFjVmQ1N24zSkExdnZEU1JWREkyQTZ1eXN3ZFp1L1BVCkkwZXpZWFV0RVNnSk1IRmQycVVNMjNuNVJsSXJ3R0xuUXFISUh5VStWWHhsdnZsRnpNOVpEWllSTmU3QlJvYXgKQVlEdUI5STZXT3FYbkFvczFqRmxNUG5NbFpqdU5kSGxpT1BjTU1oNndLaTZzZFhpVStHYTJ2RUVLY01jSVUyRgpvU2djUWdMYTk0aEpacGk3ZnNMdm1OQUxoT045UHdNMGM1dVJVejV4T0dGMUtCbWRSeEgvbUNOS2JKYjFRQm1HCkkwYitEUEdaTktXTU0xMzhIQXdoV0tkNjVoVHdYOWl4V3ZHMkh4TG1WQzg0L1BHT0tWQW9FNkpsYWFHdTlQVmkKdjlOSjVaZlZrcXdCd0hKbzZXdk9xVlA3SVFjZmg3d0drWm89Ci0tLS0tRU5EIENFUlRJRklDQVRFIFJFUVVFU1QtLS0tLQo=
+  signerName: kubernetes.io/kube-apiserver-client
+  expirationSeconds: 86400  # one day
+  usages:
+  - client auth
+EOF
+
+#save the important part oof into a file. for request we need to give base64 encoded value for that. give
+
+cat /root/ajeet.csr | base64 | tr -d "\n"
+
+#copy the output and paste it in the request portion. we need copy till equals sign otherwise it will throw errors.
+
+kubectl apply -f csr.yaml 
+#apply it
+
+controlplane $ k get csr
+NAME        AGE     SIGNERNAME                                    REQUESTOR                  REQUESTEDDURATION   CONDITION
+ajeet       2m51s   kubernetes.io/kube-apiserver-client           kubernetes-admin           24h                 Pending
+
+
+#it's in pending state we need to approve it
+
+controlplane $ kubectl certificate approve ajeet
+certificatesigningrequest.certificates.k8s.io/ajeet approved
+
+
+controlplane $ k get csr
+NAME        AGE     SIGNERNAME                                    REQUESTOR                  REQUESTEDDURATION   CONDITION
+ajeet       5m55s   kubernetes.io/kube-apiserver-client           kubernetes-admin           24h                 Approved,Issued
+csr-5p484   34d     kubernetes.io/kube-apiserver-client-kubelet   system:bootstrap:omugk8    <none>              Approved,Issued
+csr-vbx96   34d     kubernetes.io/kube-apiserver-client-kubelet   system:node:controlplane   <none>              Approved,Issued
+
+#now it's approved
+
+#Retrieve the certificate from the CSR:
+
+kubectl get csr/ajeet -o yaml
+#The certificate value is in Base64-encoded format under status.certificate.
+
+#Export the issued certificate from the CertificateSigningRequest.
+
+kubectl get csr ajeet -o jsonpath='{.status.certificate}'| base64 -d > ajeet.crt
+
+
+#now we need to create role and rolebindings
+# This is a sample command to create a Role for this new user:
+controlplane $ kubectl create role developer --verb=create --verb=get --verb=list --verb=update --verb=delete --resource=pods
+role.rbac.authorization.k8s.io/developer created
+
+
+#This is a sample command to create a RoleBinding for this new user:
+controlplane $ kubectl create rolebinding developer-binding-ajeet --role=developer --user=ajeet
+rolebinding.rbac.authorization.k8s.io/developer-binding-ajeet created
+
+
+# Add to kubeconfig
+# The last step is to add this user into the kubeconfig file.
+
+# First, you need to add new credentials:
+
+kubectl config set-credentials ajeet --client-key=ajeet.key --client-certificate=ajeet.crt --embed-certs=true
+# Then, you need to add the context:
+
+kubectl config set-context ajeet --cluster=kubernetes --user=ajeet
+# To test it, change the context to myuser:
+
+kubectl config use-context ajeet
+
+controlplane $ kubectl config set-credentials ajeet --client-key=ajeet.key --client-certificate=ajeet.crt --embed-certs=true
+User "ajeet" set.
+controlplane $ kubectl config set-context ajeet --cluster=kubernetes --user=ajeet
+Context "ajeet" created.
+controlplane $ kubectl config use-context ajeet
+Switched to context "ajeet".
+
+
+controlplane $ kubectl config get-contexts 
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+*         ajeet                         kubernetes   ajeet              
+          kubernetes-admin@kubernetes   kubernetes   kubernetes-admin   
+          myuser                        kubernetes   ajeet
+
+```
+
+### 77. (a) Create a Nginx pod dns-resolver using image nginx, (b) expose it internally with a service called dns-resolver-service. (c) Check if service name is resolvable from within the cluster.Use the image busybox:1.28 for dns lookup. (b) Save the result in /root/nginx.svc
+
+Expose internally means using a cluster ip and create a service.
+
+```bash
+
+kubectl run dns-resolver --image=nginx #just run this since they asked for creating a pod
+
+# for exposeing it internally. Pod is giving pod name
+kubectl expose pod dns-resolver --name=dns-resolver-service --port=80 --target-port=80 --type=ClusterIP
+
+#creating an image for dns lookup
+kubectl run test-nslookup --image=busybox:1.28 --rm -it --restart=Never -- nslookup dns-resolver-service
+
+# -- nslookup dns-resolver-service it's the command that needed to be run inside the container it will simply output the result and will not restarted again.
+
+#to save the output to a file
+
+kubectl run test-nslookup --image=busybox:1.28 --rm -it --restart=Never -- nslookup dns-resolver-service > /root/nginx.svc
+```
+
+### 78. A pod “appychip” (image=nginx) in default namespace is not running.​ Find the problem and fix it and make it running.
+
+There was a taint in the node01 so we need to add toleration in the specific node so that it can be placed in the specific node
+
+https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+search for taints and tolerations
+
+example.yaml
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    env: test
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    imagePullPolicy: IfNotPresent
+  tolerations:
+  - key: "example-key"
+    operator: "Exists"
+    value: "value1"
+    effect: "NoSchedule"
+```
+
+### 79. Create a ReplicaSet (Name: appychip, Image: nginx:1.18, Replica: 4)​. There is already a Pod running in a cluster.​ Make sure that the total count of pods running in the cluster is not more than 4​
+
+take the configuration of existing pod.
+reate a replicaset to match the existing pod. 
+For that, we would need to create a new replicaset definition file with matchLabels that must be matched the Pod's matchLabels. Just scaling the Replicaset would not be the right solution.
+
+search for replicaset in documentation https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+
+example.yaml
+```bash
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  creationTimestamp: "2023-09-05T03:02:18Z"
+  generation: 1
+  labels:
+    run: app-chip #label of currentl running pod
+  name: appychip
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      run: app-chip
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        run: app-chip
+    spec:
+      containers:
+      - image: nginx
+        imagePullPolicy: Always
+        name: app-chip
+```
+
+### 80. Create a Network Policy named "appychip" in default namespace​
+There should be two types, ingress and egress. ​
+The ingress should block traffic from an IP range of your choice except some other IP range. Should also have namespace and pod selector.​
+Ports for ingress policy should be 6379​
+For Egress, it should allow traffic to an IP range of your choice on 5978 port.​
+
+
+example.yaml
+```bash
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: appychip
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      role: db
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: 172.17.0.0/16
+        except:
+        - 172.17.1.0/24
+    - namespaceSelector:
+        matchLabels:
+          project: myproject
+    - podSelector:
+        matchLabels:
+          role: frontend
+    ports:
+    - protocol: TCP
+      port: 6379
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/24
+    ports:
+    - protocol: TCP
+      port: 5978
+```
+
+
+### 81. You have to access to multiple clusters from your main terminal through kubectl contexts. Write all those context names into */opt/course/1/contexts*. Next write a command to disply the current context into */opt/course/1/context_default_kubectl.sh*, the command should use *kubectl*. Finally write a second command doing the same things into */opt/course/1/context_default_no_kubectl.sh*, but without the use of kubectl.
+
+
+```bash
+
+kubectl config get-contexts -o name > /opt/course/1/contexts
+
+controlplane $ touch /opt/course/1/contexts
+controlplane $ kubectl config get-contexts -o name > /opt/course/1/contexts
+controlplane $ cat /opt/course/1/contexts 
+kubernetes-admin@kubernetes
+
+#current context into file
+
+controlplane $ vi /opt/course/1/context_default_kubectl.sh
+controlplane $ chmod +x /opt/course/1/context_default_kubectl.sh 
+controlplane $ ./context_default_kubectl.sh 
+kubernetes-admin@kubernetes
+controlplane $ cat context_default_kubectl.sh 
+kubectl config current-context  #command to see current context
+
+#without kubectl 
+controlplane $ cat ~/.kube/config | grep current
+current-context: kubernetes-admin@kubernetes
+
+#save it in a file and run
+
+controlplane $ echo "cat ~/.kube/config | grep current" > context_default_no_kubectl.sh
+controlplane $ chmod +x context_default_no_kubectl.sh 
+controlplane $ ./context_default_no_kubectl.sh 
+current-context: kubernetes-admin@kubernetes
+```
+
+### 82. There are various Pods in all namespaces. Write a command into /opt/course/5/find_pods.sh which lists all Pods sorted by their AGE (metadata.creationTimestamp). Write a second command into /opt/course/5/find_pods_uid.sh which lists all Pods sorted by field metadata.uid. Use kubectl sorting for both commands.
+
+this command is in kubectl cheatsheet. search for sort.
+
+```bash
+echo "kubectl get pods -A --sort-by=metadata.creationTimestamp" > /opt/course/5/find_pods.sh
+
+
+echo "kubectl get pods -A --sort-by=metadata.uid" > /opt/course/5/find_pods_uid.sh
+```
+
+
+### 84. Ssh into the controlplane node with ssh cluster1-controlplane1. Check how the controlplane components kubelet, kube-apiserver, kubescheduler, kube-controller-manager and etcd are started/installed on the controplane node. Also find out the name of the DNS application and how it's started/installed on the controlplane node. 
+write your findings into file /opt/course/8/controlplane-componets.txt. The file should be structured like:
+ /opt/course/8/controlplane-componenet.txt
+ kubelet:[type]
+ kube-apiserver:[type]
+ kube-scheduler:[type]
+ kube-controller-manager:[type]
+ etcd:[type]
+ dns:[type]
+
+choices of :[type] are : not-installed, process, static-pod, pod
+
+
+```bash
+controlplane $ find /etc/systemd/system/ | grep kube
+/etc/systemd/system/multi-user.target.wants/kubelet.service  #kubelet is running as process
+controlplane $ find /etc/systemd/system/ | grep etcd #etcd is not running as pd
+controlplane $ find /etc/kubernetes/manifests/
+/etc/kubernetes/manifests/
+/etc/kubernetes/manifests/etcd.yaml
+/etc/kubernetes/manifests/kube-scheduler.yaml
+/etc/kubernetes/manifests/kube-controller-manager.yaml
+/etc/kubernetes/manifests/kube-apiserver.yaml
+
+#also need to check kubelet manifests and the pods which are running
+
+controlplane $ kubectl -n kube-system get pod -o wide | grep controlplane #running static-pod
+calico-kube-controllers-75bdb5b75d-kh2wj   1/1     Running   2 (19m ago)   34d   192.168.0.2   controlplane   <none>           <none>
+canal-rc7zk                                2/2     Running   2 (19m ago)   34d   172.30.1.2    controlplane   <none>           <none>
+etcd-controlplane                          1/1     Running   2 (19m ago)   34d   172.30.1.2    controlplane   <none>           <none>
+kube-apiserver-controlplane                1/1     Running   2 (19m ago)   34d   172.30.1.2    controlplane   <none>           <none>
+kube-controller-manager-controlplane       1/1     Running   2 (19m ago)   34d   172.30.1.2    controlplane   <none>           <none>
+kube-proxy-6xsx9                           1/1     Running   2 (19m ago)   34d   172.30.1.2    controlplane   <none>           <none>
+kube-scheduler-controlplane                1/1     Running   2 (19m ago)   34d   172.30.1.2    controlplane   <none>           <none>
+
+
+#to see dns
+
+controlplane $ kubectl -n kube-system get deployments.apps 
+NAME                      READY   UP-TO-DATE   AVAILABLE   AGE
+calico-kube-controllers   1/1     1            1           34d
+coredns                   2/2     2            2           34d
+
+
+#to make necessary files
+controlplane $ mkdir -p /opt/course/8/
+controlplane $ cd /opt/course/8/
+controlplane $ vi controlplane-componenet.txt
+
+#answer
+kubelet: process
+kube-apiserver: static-pod
+kube-scheduler: static-pod
+kube-controller-manager: static-pod
+etcd: static-pod
+dns: pod coredns
+```
+
+### 85. Create a new namespae named appychip. Create a new network policy named my-policy in the appychip namespace. (1) Network policy should allow PODS within the appychip to connect to each other only on port 80. No other ports should be allowed. (2) No PODs from outside of the appychip should be able to connect to any pods inside the appychip. (11%)
+
+```bash
+controlplane $ k create namespace appychip
+namespace/appychip created
+controlplane $ k get ns
+NAME                 STATUS   AGE
+appychip             Active   14s
+
+controlplane $ k run nginx --image nginx -n appychip 
+pod/nginx created
+
+controlplane $ k get pods -n appychip 
+NAME    READY   STATUS    RESTARTS   AGE
+nginx   1/1     Running   0          14s
+```
+
+ns.yaml
+```bash
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-policy
+  namespace: appychip
+spec:
+  podSelector: {} #to all the pod in the namespace
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {} #from all the pod in the namespace
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+### 86. Create a pod output-pod which write "congratulations! you have passed CKA Exam" into a file "output-pod.txt". The Pod output-pod should be deleted automatically after writing the text to the file.
+
+
+```bash
+#--rm to remove pod --restart=Never to never allow restart
+controlplane $ k run output-pod --image=busybox -it --rm --restart=Never -- /bin/sh -c "echo Congratulations! you have passed the CKA exam" > output-pod.txt
+controlplane $ cat output-pod.txt 
+Congratulations! you have passed the CKA exam
+pod "output-pod" deleted
+
+```
 
