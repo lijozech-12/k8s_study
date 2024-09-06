@@ -3011,3 +3011,509 @@ pod "output-pod" deleted
 
 ```
 
+
+### 87. Deploy a pod named nginx-pod using the nginx:alpine image.
+
+
+```bash
+controlplane ~ ➜  k run nginx-pod --image nginx:alpine
+pod/nginx-pod created
+
+controlplane ~ ➜  k get pods
+NAME        READY   STATUS    RESTARTS   AGE
+nginx-pod   1/1     Running   0          10s
+
+controlplane ~ ➜  k describe pods  nginx-pod | grep Image
+    Image:          nginx:alpine
+    Image ID:       docker.io/library/nginx@sha256:1e67a3c8607fe555f47dc8a72f25424b10273639136c061c508628da3112f90e
+
+```
+
+### 88. Deploy a messaging pod using the redis:alpine image with the labels set to tier=msg.
+
+```bash
+controlplane ~ ➜  k run --help | grep labels
+  # Start a hazelcast pod and set labels "app=hazelcast" and "env=prod" in the container
+  kubectl run hazelcast --image=hazelcast/hazelcast --labels="app=hazelcast,env=prod"
+    -l, --labels='':
+        Comma separated labels to apply to the pod. Will override previous values.
+```
+
+### 89. Create a namespace named apx-x9984574.
+
+```bash
+
+controlplane ~ ➜  k create namespace apx-x9984574
+namespace/apx-x9984574 created
+```
+
+### 90. Get the list of nodes in JSON format and store it in a file at /opt/outputs/nodes-z3444kd9.json.
+
+
+```bash
+
+ k get node -o json > /opt/outputs/nodes-z3444kd9.json
+```
+
+### 91. Create a service messaging-service to expose the messaging application within the cluster on port 6379. Use imperative commands.
+
+```bash
+controlplane ~ ➜  k expose pod messaging --port 6379 --name messaging-service
+service/messaging-service exposed
+
+controlplane ~ ➜  k get svc
+NAME                TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+kubernetes          ClusterIP   10.96.0.1      <none>        443/TCP    59m
+messaging-service   ClusterIP   10.109.0.114   <none>        6379/TCP   5s
+```
+
+### 92. Create a deployment named hr-web-app using the image kodekloud/webapp-color with 2 replicas.
+
+```bash
+controlplane ~ ➜  k create deployment hr-web-app --image kodekloud/webapp-color --replicas 2
+deployment.apps/hr-web-app created
+
+controlplane ~ ➜  k get deployments.apps -w
+NAME         READY   UP-TO-DATE   AVAILABLE   AGE
+hr-web-app   2/2     2            2           11s
+```
+
+### 93. Create a static pod named static-busybox on the controlplane node that uses the busybox image and the command sleep 1000.
+
+
+
+```bash
+
+k run static-busybox --image busybox --dry-run=client -o yaml --command -- sleep 1000 > static-busybox.yaml #after --command everything is command
+
+
+controlplane ~ ➜  cat /etc/kubernetes/manifests/static-busybox.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: static-busybox
+  name: static-busybox
+spec:
+  containers:
+  - command:
+    - sleep
+    - "1000"
+    image: busybox
+    name: static-busybox
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+controlplane ~ ➜  k get pods
+NAME                          READY   STATUS    RESTARTS   AGE
+hr-web-app-5d6b77db78-5ttkd   1/1     Running   0          11m
+hr-web-app-5d6b77db78-9mvcl   1/1     Running   0          11m
+messaging                     1/1     Running   0          24m
+nginx-pod                     1/1     Running   0          29m
+static-busybox-controlplane   1/1     Running   0          14s
+```
+
+### 94.Create a POD in the finance namespace named temp-bus with the image redis:alpine.
+
+```bash
+controlplane ~ ➜  k run temp-bus --image redis:alpine -n finance
+pod/temp-bus created
+
+controlplane ~ ➜  k get pods -n finance 
+NAME       READY   STATUS    RESTARTS   AGE
+temp-bus   1/1     Running   0          10s
+```
+
+### 95. A new application orange is deployed. There is something wrong with it. Identify and fix the issue.
+
+```bash
+controlplane ~ ➜  k logs orange init-myservice #to check the logs of specific pods.
+sh: sleeeep: not found
+
+controlplane ~ ➜  k edit pods orange #edit the files remove sleep
+error: pods "orange" is invalid
+A copy of your changes has been stored to "/tmp/kubectl-edit-3372500299.yaml"
+error: Edit cancelled, no valid changes were saved.
+
+
+controlplane ~ ➜  kubectl replace --force -f /tmp/kubectl-edit-3372500299.yaml
+pod "orange" deleted
+pod/orange replaced
+
+controlplane ~ ➜  k get pods -w
+NAME                          READY   STATUS    RESTARTS   AGE
+hr-web-app-5d6b77db78-5ttkd   1/1     Running   0          21m
+hr-web-app-5d6b77db78-9mvcl   1/1     Running   0          21m
+messaging                     1/1     Running   0          34m
+nginx-pod                     1/1     Running   0          39m
+orange                        1/1     Running   0          7s
+static-busybox-controlplane   1/1     Running   0          10m
+
+```
+
+### 96. Expose the hr-web-app as service hr-web-app-service application on port 30082 on the nodes on the cluster. The web application listens on port 8080.
+
+```bash
+controlplane ~ ✖ k expose deployment hr-web-app --name hr-web-app-service --type NodePort --port 8080
+service/hr-web-app-service exposed
+
+controlplane ~ ➜  k get svc
+NAME                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+hr-web-app-service   NodePort    10.108.151.157   <none>        8080:31644/TCP   6s
+kubernetes           ClusterIP   10.96.0.1        <none>        443/TCP          87m
+messaging-service    ClusterIP   10.109.0.114     <none>        6379/TCP         28m
+
+# we can't specify the nodeport directly so we need to edit in the yaml file
+
+controlplane ~ ➜  k edit svc hr-web-app-service 
+service/hr-web-app-service edited
+
+controlplane ~ ➜  k get svc
+NAME                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+hr-web-app-service   NodePort    10.108.151.157   <none>        8080:30082/TCP   115s
+kubernetes           ClusterIP   10.96.0.1        <none>        443/TCP          89m
+messaging-service    ClusterIP   10.109.0.114     <none>        6379/TCP         29m
+```
+
+### 97. Use JSON PATH query to retrieve the osImages of all the nodes and store it in a file /opt/outputs/nodes_os_x43kj56.txt. The osImages are under the nodeInfo section under status of each node.
+
+```bash
+controlplane ~ ➜  kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.osImage}
+'
+Ubuntu 22.04.4 LTS
+controlplane ~ ➜  kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.osImage}' > /opt/outputs/nodes_os_x43kj56.txt
+
+controlplane ~ ➜  cat /opt/outputs/nodes_os_x43kj56.txt
+Ubuntu 22.04.4 LTS
+```
+
+### 98. Create a Persistent Volume with the given specification: -
+
+##### Volume name: pv-analytics
+
+##### Storage: 100Mi
+
+##### Access mode: ReadWriteMany
+
+##### Host path: /pv/data-analytics
+
+
+
+```bash
+controlplane ~ ➜  cat pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-analytics
+spec:
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /pv/data-analytics
+
+controlplane ~ ✖ k apply -f pv.yaml
+persistentvolume/pv-analytics created
+
+controlplane ~ ➜  k get pv
+NAME           CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+pv-analytics   100Mi      RWX            Retain           Available                          <unset>                          5s
+
+
+
+controlplane ~ ➜  k describe pv pv-analytics 
+Name:            pv-analytics
+Labels:          <none>
+Annotations:     <none>
+Finalizers:      [kubernetes.io/pv-protection]
+StorageClass:    
+Status:          Available
+Claim:           
+Reclaim Policy:  Retain
+Access Modes:    RWX
+VolumeMode:      Filesystem
+Capacity:        100Mi
+Node Affinity:   <none>
+Message:         
+Source:
+    Type:          HostPath (bare host directory volume)
+    Path:          /pv/data-analytics
+    HostPathType:  
+Events:            <none>
+
+```
+
+### 99. Take a backup of the etcd cluster and save it to /opt/etcd-backup.db.
+
+
+```bash
+controlplane ~ ➜  cat /etc/kubernetes/manifests/etcd.yaml | grep file
+    - --cert-file=/etc/kubernetes/pki/etcd/server.crt
+    - --key-file=/etc/kubernetes/pki/etcd/server.key
+    - --peer-cert-file=/etc/kubernetes/pki/etcd/peer.crt
+    - --peer-key-file=/etc/kubernetes/pki/etcd/peer.key
+    - --peer-trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt
+    - --trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt
+    seccompProfile:
+
+controlplane ~ ✖ ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379   --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key   snapshot save /opt/etcd-backup.db
+Snapshot saved at /opt/etcd-backup.db
+
+controlplane ~ ➜  export ETCDCTL_API=3
+etcdctl --write-out=table snapshot status  /opt/etcd-backup.db
++----------+----------+------------+------------+
+|   HASH   | REVISION | TOTAL KEYS | TOTAL SIZE |
++----------+----------+------------+------------+
+| 46f0055a |     2808 |       1005 |     2.3 MB |
++----------+----------+------------+------------+
+
+```
+
+
+
+
+### 100. Create a Pod called redis-storage with image: redis:alpine with a Volume of type emptyDir that lasts for the life of the Pod.
+
+https://kubernetes.io/docs/concepts/storage/volumes/
+
+
+```bash
+controlplane ~ ➜  k run redis-storage --image redis:alpine --dry-run=client -o yaml > redis-storage.yaml
+
+controlplane ~ ➜  vi redis-storage.yaml 
+
+controlplane ~ ➜  cat redis-storage.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: redis-storage
+  name: redis-storage
+spec:
+  containers:
+  - image: redis:alpine
+    name: redis-storage
+    volumeMounts:
+    - mountPath: /data/redis
+      name: cache-volume
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+  volumes:
+  - name: cache-volume
+    emptyDir: {} #since their is no size limits
+
+status: {}
+
+controlplane ~ ➜  k apply -f redis-storage.yaml 
+pod/redis-storage created
+
+controlplane ~ ✖ k get pods -w
+NAME            READY   STATUS    RESTARTS   AGE
+redis-storage   1/1     Running   0          10s
+
+```
+
+### 101. Create a new pod called super-user-pod with image busybox:1.28. Allow the pod to be able to set system_time.
+
+it's about security context. https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
+```bash
+controlplane ~ ➜  k run super-user-pod --image busybox:1.28 --dry-run=client -o yaml> super-pod.yaml
+
+controlplane ~ ➜  vi super-pod.yaml 
+
+controlplane ~ ➜  cat super-pod.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: super-user-pod
+  name: super-user-pod
+spec:
+  containers:
+  - image: busybox:1.28
+    name: super-user-pod
+    command: ["sleep", "4800"]
+    securityContext:
+      capabilities:
+        add: ["SYS_TIME"]
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+```
+
+
+### 102. A pod definition file is created at /root/CKA/use-pv.yaml. Make use of this manifest file and mount the persistent volume called pv-1. Ensure the pod is running and the PV is bound.
+
+
+##### mountPath: /data
+
+##### persistentVolumeClaim Name: my-pvc
+
+```bash
+
+controlplane ~ ➜  k get pv
+NAME   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+pv-1   10Mi       RWO            Retain           Available                          <unset>                          7m26s
+
+controlplane ~ ➜  vi pvc.yaml
+
+controlplane ~ ➜  cat pvc.yaml 
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-pvc
+spec:
+  accessModes:  #it's important
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi
+
+
+controlplane ~ ➜  k apply -f pvc.yaml 
+persistentvolumeclaim/my-pvc created
+
+controlplane ~ ➜  k get pvc
+NAME     STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS VOLUMEATTRIBUTESCLASS   AGE
+my-pvc   Bound    pv-1     10Mi       RWO                           <unset>                 3s
+
+
+controlplane ~ ➜  cat CKA/use-pv.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: use-pv
+  name: use-pv
+spec:
+  containers:
+  - image: nginx
+    name: use-pv
+    volumeMounts:
+    - mountPath: "/data"
+      name: mypd
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+  volumes:
+    - name: mypd
+      persistentVolumeClaim:
+        claimName: my-pvc
+status: {}
+
+```
+
+### 103. Create a new deployment called nginx-deploy, with image nginx:1.16 and 1 replica. Next upgrade the deployment to version 1.17 using rolling update.
+
+```bash
+controlplane ~ ➜  k create deployment nginx-deploy --image nginx:1.16 --replicas 1
+deployment.apps/nginx-deploy created
+
+
+controlplane ~ ➜  k create deployment nginx-deploy --image nginx:1.16 --replicas 1
+deployment.apps/nginx-deploy created
+
+
+controlplane ~ ➜  k describe deployments.apps nginx-deploy 
+Name:                   nginx-deploy
+Namespace:              default
+CreationTimestamp:      Fri, 06 Sep 2024 10:47:07 +0000
+Labels:                 app=nginx-deploy
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=nginx-deploy
+Replicas:               1 desired | 1 updated | 1 total | 1 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=nginx-deploy
+  Containers:
+   nginx:
+    Image:         nginx:1.16
+    Port:          <none>
+    Host Port:     <none>
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   nginx-deploy-858fb84d4b (1/1 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  44s   deployment-controller  Scaled up replica set nginx-deploy-858fb84d4b to 1
+
+controlplane ~ ➜  k set image deployment/nginx-deploy nginx=nginx:1.17
+deployment.apps/nginx-deploy image updated
+
+controlplane ~ ➜  k describe deployments.apps nginx-deploy 
+Name:                   nginx-deploy
+Namespace:              default
+CreationTimestamp:      Fri, 06 Sep 2024 10:47:07 +0000
+Labels:                 app=nginx-deploy
+Annotations:            deployment.kubernetes.io/revision: 2
+Selector:               app=nginx-deploy
+Replicas:               1 desired | 1 updated | 1 total | 1 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=nginx-deploy
+  Containers:
+   nginx:
+    Image:         nginx:1.17
+    Port:          <none>
+    Host Port:     <none>
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  nginx-deploy-858fb84d4b (0/0 replicas created)
+NewReplicaSet:   nginx-deploy-58f87d49 (1/1 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  2m7s  deployment-controller  Scaled up replica set nginx-deploy-858fb84d4b to 1
+  Normal  ScalingReplicaSet  10s   deployment-controller  Scaled up replica set nginx-deploy-58f87d49 to 1
+  Normal  ScalingReplicaSet  6s    deployment-controller  Scaled down replica set nginx-deploy-858fb84d4b to 0 from 1
+
+```
+
+### 104. Create a new user called john. Grant him access to the cluster. John should have permission to create, list, get, update and delete pods in the development namespace . The private key exists in the location: /root/CKA/john.key and csr at /root/CKA/john.csr.
+
+
+##### Important Note: As of kubernetes 1.19, the CertificateSigningRequest object expects a signerName.
+
+##### Please refer the documentation to see an example. The documentation tab is available at the top right of terminal.
+
+
+
+### 105. Create a nginx pod called nginx-resolver using image nginx, expose it internally with a service called nginx-resolver-service. Test that you are able to look up the service and pod names from within the cluster. Use the image: busybox:1.28 for dns lookup. Record results in /root/CKA/nginx.svc and /root/CKA/nginx.pod.
+
+
+
+### 106. Create a static pod on node01 called nginx-critical with image nginx and make sure that it is recreated/restarted automatically in case of a failure.
+
+
+##### Use /etc/kubernetes/manifests as the Static Pod path for example.
