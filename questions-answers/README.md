@@ -3278,6 +3278,12 @@ etcdctl --write-out=table snapshot status  /opt/etcd-backup.db
 
 ### 100. Create a Pod called redis-storage with image: redis:alpine with a Volume of type emptyDir that lasts for the life of the Pod.
 
+Pod named 'redis-storage' created
+
+Pod 'redis-storage' uses Volume type of emptyDir
+
+Pod 'redis-storage' uses volumeMount with mountPath = /data/redis
+
 https://kubernetes.io/docs/concepts/storage/volumes/
 
 
@@ -3508,8 +3514,44 @@ Events:
 ##### Please refer the documentation to see an example. The documentation tab is available at the top right of terminal.
 
 
+```bash
+
+
+k auth can-i get pods --namespace=development --as john
+k auth can-i create pods --namespace=development --as john
+k auth can-i watch pods --namespace=development --as john
+
+
+```
 
 ### 105. Create a nginx pod called nginx-resolver using image nginx, expose it internally with a service called nginx-resolver-service. Test that you are able to look up the service and pod names from within the cluster. Use the image: busybox:1.28 for dns lookup. Record results in /root/CKA/nginx.svc and /root/CKA/nginx.pod.
+
+```bash
+
+k run nginx-resolver --image=nginx #to create an nginx pod
+
+#expose it as a service
+
+k expose pod nginx-resolver --name=nginx-resolver-service --port=80
+
+#verify the service
+k describe svc nginx-resolver-service
+
+#to run the service
+k run busybox --image=busybox:1.28 -- sleep 4000 #sleep is to run it on the background
+
+#for dns lookup from the pod
+k exec busybox -- nslookup nginx-resolver-service > /root/CKA/nginx.svc
+
+#first we need to find out the ip address
+k get pods -o wide
+
+k exec busybox -- nslookup <ip-addr>.default.pod.cluster.local > /root/CKA/nginx.pod
+#ip address needed to be separated by - instead of . 10-50-192-4
+
+```
+search for pod dns in documentation to solve further. 
+https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/
 
 
 
@@ -3517,3 +3559,910 @@ Events:
 
 
 ##### Use /etc/kubernetes/manifests as the Static Pod path for example.
+
+
+```bash
+
+#ssh into node
+
+ssh node01
+
+kubectl run nginx-critical --image=nginx --restart=Always --dry-run=client -o yaml
+
+#copy it and paste it like 
+
+cat > /etc/kubernetes/manifests/nginx-critical.yaml #and paste it then ctrl+c
+
+
+k get pods #to check pods
+
+```
+
+### 107. Create a new service account with the name pvviewer. Grant this Service account access to list all PersistentVolumes in the cluster by creating an appropriate cluster role called pvviewer-role and ClusterRoleBinding called pvviewer-role-binding.
+Next, create a pod called pvviewer with the image: redis and serviceAccount: pvviewer in the default namespace.
+
+```bash
+
+k create serviceaccount pvviewer
+
+k create clusterrole pvviewer-role --verb=list --resource=persistentvolumes
+
+k create clusterrolebinding pvviewer-role-binding --clusterrole=pvviewer-role --serviceaccount=default:pvviewer  # default is the namespae
+
+k describe clusterrolebinding pvviewer-role-binding
+
+k run pvviewer --image=redis --dry-run -o yaml > pvviewer.yaml
+
+#then add service account inside the yaml file
+```
+
+search for service account in k8s documentation
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+
+### 108. List the InternalIP of all nodes of the cluster. Save the result to a file /root/CKA/node_ips.Answer should be in the format: InternalIP of controlplane<space>InternalIP of node01 (in a single line)
+
+
+```bash
+k get nodes -o wide -o json | jp | grep -i internalip -B 100
+
+k get nodes -o json | jp -c 'paths' | grep type | grep -v condition
+
+k get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' | jq
+
+k get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}' | jq > /root/CKA/node_ips
+
+```
+
+### 109. Create a pod called multi-pod with two containers.
+##### Container 1: name: alpha, image: nginx
+##### Container 2: name: beta, image: busybox, command: sleep 4800
+
+##### Environment Variables:
+###### container 1:
+###### name: alpha
+
+###### Container 2:
+###### name: beta
+
+```bash
+
+k run multi-pod --image=nginx --dry-run -o yaml > multipod.yaml
+
+```
+
+
+
+
+### 109. Create a Pod called non-root-pod , image: redis:alpine
+
+##### runAsUser: 1000
+
+##### fsGroup: 2000
+
+security context
+k get pods <name> -o yaml
+
+
+
+### 109. We have deployed a new pod called np-test-1 and a service called np-test-service. Incoming connections to this service are not working. Troubleshoot and fix it.
+Create NetworkPolicy, by the name ingress-to-nptest that allows incoming connections to the service over port 80.
+
+
+Important: Don't delete any current objects deployed.
+
+Important: Don't Alter Existing Objects!
+
+NetworkPolicy: Applied to All sources (Incoming traffic from all pods)?
+
+NetWorkPolicy: Correct Port?
+
+NetWorkPolicy: Applied to correct Pod?
+
+
+```bash
+
+k run curl --image=alpine/curl --rm -it -- sh #for testing curl
+k get pods --show-labels #for getting labels and working in that favour
+```
+
+
+
+
+### 110. Taint the worker node node01 to be Unschedulable. Once done, create a pod called dev-redis, image redis:alpine, to ensure workloads are not scheduled to this worker node. Finally, create a new pod called prod-redis and image: redis:alpine with toleration to be scheduled on node01.
+
+
+key: env_type, value: production, operator: Equal and effect: NoSchedule
+
+```bash
+k taint nodes node01 env_type=production:NoSchedule
+
+k run dev-redis --image=redis:alpine
+
+k run prod-redis --image=reedis:alpine --dry-run=client -o yaml > prod-redis.yaml
+```
+
+
+### 111. Create a pod called hr-pod in hr namespace belonging to the production environment and frontend tier .
+image: redis:alpine
+
+
+Use appropriate labels and create all the required objects if it does not exist in the system already.
+
+labels command
+
+
+### 112. A kubeconfig file called super.kubeconfig has been created under /root/CKA. There is something wrong with the configuration. Troubleshoot and fix it.
+
+```bash
+
+kubectl get nodes --kubeconfig /root/CKA/super.kubeconfig
+
+cat .kube/config #to see the current kubeconfig file
+#or
+kubectl config view
+```
+
+### 113. We have created a new deployment called nginx-deploy. scale the deployment to 3 replicas. Has the replica's increased? Troubleshoot the issue and fix it.
+
+```bash
+
+kubectl get pods -n kube-system #to check the controller manager and pods.
+
+```
+
+### 114. Create a new deployment called nginx-deploy, with image nginx:1.16 and 8 replica. There are 5 worker node in cluster. Please make sure no pod will get deployed on 2 worker node, mentioned below: 
+##### Worker-node-1
+##### Worker-node-2
+
+Cordon both of the nodes and do deployment and uncordon the nodes
+
+
+### 115. There are 3 Node in the cluster, create DaemonSet (Name: my-pod, Image: nginx) on each node except one (Worker-node-3).
+
+Taint the specific node
+```bash
+kubectl taint node worker-node-3 env=qa:NoSchedule
+
+kubectl describe node worker-node-3-cgaga | grep -i taint
+```
+
+### 116. Generate a file (CKA007.txt) with details about the available size of all the node in the k8s cluster using a custom column, format as mentioned below.
+
+name  | Available_memory | available_cpu
+node1 | ...              | ...
+node2 | ...              | ...
+
+
+```bash
+
+kubectl get nodes -o json
+
+kubectl get node -o custom-columns=NAME:.metadata.name.AVAILABLE_MEMORY:.status.allocatable.memory,AVAILABLE_CPU:.status.allocatable.cpu > CKA007.txt
+```
+
+## Troubleshooting in k8s
+
+Check Kubernetes Components, Insepct Logs, Rersource Usage, Networking, Health Checks, Cluster configuration, Check Events, Version Compatibility, Community Resources, Documentation and Best practices
+
+
+### 117. Troubleshooting Test 1: A simple 2 tier application is deployed in the alpha namespace. It must display a green web page on success. Click on the App tab at the top of your terminal to view your application. It is currently failed. Troubleshoot and fix the issue.
+
+```bash
+
+controlplane ~ ➜  k get pods -n alpha 
+NAME                           READY   STATUS    RESTARTS   AGE
+webapp-mysql-9b567db7f-h4gkp   1/1     Running   0          2m43s
+mysql                          1/1     Running   0          2m43s
+
+controlplane ~ ➜  kubectl config set-context --current --namespace alpha
+Context "default" modified.
+
+controlplane ~ ➜  k get pods
+NAME                           READY   STATUS    RESTARTS   AGE
+webapp-mysql-9b567db7f-h4gkp   1/1     Running   0          3m50s
+mysql                          1/1     Running   0          3m50s
+
+
+controlplane ~ ➜  k get deployments.apps 
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+webapp-mysql   1/1     1            1           4m27s
+
+controlplane ~ ➜  k get pods 
+NAME                           READY   STATUS    RESTARTS   AGE
+webapp-mysql-9b567db7f-h4gkp   1/1     Running   0          4m57s
+mysql                          1/1     Running   0          4m57s
+
+controlplane ~ ➜  k get svc
+NAME          TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE
+mysql         ClusterIP   10.43.85.40    <none>        3306/TCP         5m6s
+web-service   NodePort    10.43.110.18   <none>        8080:30081/TCP   5m6s
+
+
+controlplane ~ ➜  curl http://localhost:30081
+<!doctype html>
+<title>Hello from Flask</title>
+<body style="background: #ff3f3f;"></body>
+<div style="color: #e4e4e4;
+    text-align:  center;
+    height: 90px;
+    vertical-align:  middle;">
+
+  
+    <img src="/static/img/failed.png">
+    <!-- <h1> DATABASE CONNECTION FAILED !!</h1> -->
+  
+
+  
+    <h2> Environment Variables: DB_Host=mysql-service; DB_Database=Not Set; DB_User=root; DB_Password=paswrd; 2003: Can&#39;t connect to MySQL server on &#39;mysql-service:3306&#39; (-2 Name does not resolve) </h2>
+  
+
+  
+    <p> From webapp-mysql-9b567db7f-h4gkp!</p>
+  
+
+  
+
+</div>
+
+
+controlplane ~ ➜  k describe deployments.apps webapp-mysql 
+Name:                   webapp-mysql
+Namespace:              alpha
+CreationTimestamp:      Sat, 07 Sep 2024 17:52:51 +0000
+Labels:                 name=webapp-mysql
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               name=webapp-mysql
+Replicas:               1 desired | 1 updated | 1 total | 1 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  name=webapp-mysql
+  Containers:
+   webapp-mysql:
+    Image:      mmumshad/simple-webapp-mysql
+    Port:       8080/TCP
+    Host Port:  0/TCP
+    Environment:
+      DB_Host:      mysql-service  #the service name is mysql not sql
+      DB_User:      root
+      DB_Password:  paswrd
+    Mounts:         <none>
+  Volumes:          <none>
+  Node-Selectors:   <none>
+  Tolerations:      <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   webapp-mysql-9b567db7f (1/1 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  6m12s  deployment-controller  Scaled up replica set webapp-mysql-9b567db7f to 1
+
+```
+
+
+### 118. Troubleshooting Test 2: The same 2 tier application is deployed in the beta namespace. It must display a green web page on success. Click on the App tab at the top of your terminal to view your application. It is currently failed. Troubleshoot and fix the issue.
+
+
+```bash
+
+controlplane ~ ➜  kubectl config set-context --current --namespace beta
+Context "default" modified.
+
+controlplane ~ ➜  k get pods
+NAME                           READY   STATUS    RESTARTS   AGE
+webapp-mysql-9b567db7f-fqszt   1/1     Running   0          76s
+mysql                          1/1     Running   0          76s
+
+controlplane ~ ➜  k get deployments.apps 
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+webapp-mysql   1/1     1            1           81s
+
+controlplane ~ ➜  k get svc
+NAME            TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE
+mysql-service   ClusterIP   10.43.132.87   <none>        3306/TCP         2m13s
+web-service     NodePort    10.43.25.92    <none>        8080:30081/TCP   2m13s
+
+controlplane ~ ➜  k describe deployments.apps webapp-mysql 
+Name:                   webapp-mysql
+Namespace:              beta
+CreationTimestamp:      Sat, 07 Sep 2024 18:04:16 +0000
+Labels:                 name=webapp-mysql
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               name=webapp-mysql
+Replicas:               1 desired | 1 updated | 1 total | 1 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  name=webapp-mysql
+  Containers:
+   webapp-mysql:
+    Image:      mmumshad/simple-webapp-mysql
+    Port:       8080/TCP
+    Host Port:  0/TCP
+    Environment:
+      DB_Host:      mysql-service
+      DB_User:      root
+      DB_Password:  paswrd
+    Mounts:         <none>
+  Volumes:          <none>
+  Node-Selectors:   <none>
+  Tolerations:      <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   webapp-mysql-9b567db7f (1/1 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  3m21s  deployment-controller  Scaled up replica set webapp-mysql-9b567db7f to 1
+
+controlplane ~ ➜  k describe svc mysql-service 
+Name:              mysql-service
+Namespace:         beta
+Labels:            <none>
+Annotations:       <none>
+Selector:          name=mysql
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.43.132.87
+IPs:               10.43.132.87
+Port:              <unset>  3306/TCP
+TargetPort:        8080/TCP
+Endpoints:         10.42.0.11:8080 #mistake in the  port. port is 3306
+Session Affinity:  None
+Events:            <none>
+
+controlplane ~ ➜  k get pods --show-labels 
+NAME                           READY   STATUS    RESTARTS   AGE     LABELS
+webapp-mysql-9b567db7f-fqszt   1/1     Running   0          4m17s   name=webapp-mysql,pod-template-hash=9b567db7f
+mysql                          1/1     Running   0          4m17s   name=mysql
+
+
+controlplane ~ ➜  k get pods -o wide
+NAME                           READY   STATUS    RESTARTS   AGE     IP           NODE           NOMINATED NODE   READINESS GATES
+webapp-mysql-9b567db7f-fqszt   1/1     Running   0          5m22s   10.42.0.12   controlplane   <none>           <none>
+mysql                          1/1     Running   0          5m22s   10.42.0.11   controlplane   <none>           <none>
+
+
+controlplane ~ ➜  k edit svc mysql-service 
+service/mysql-service edited
+
+controlplane ~ ➜  k get svc
+NAME            TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE
+web-service     NodePort    10.43.25.92    <none>        8080:30081/TCP   8m6s
+mysql-service   ClusterIP   10.43.132.87   <none>        3306/TCP         8m6s
+
+controlplane ~ ➜  k describe svc mysql-service 
+Name:              mysql-service
+Namespace:         beta
+Labels:            <none>
+Annotations:       <none>
+Selector:          name=mysql
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.43.132.87
+IPs:               10.43.132.87
+Port:              <unset>  3306/TCP
+TargetPort:        3306/TCP
+Endpoints:         10.42.0.11:3306
+Session Affinity:  None
+Events:            <none>
+```
+
+
+### 119. Troubleshooting Test 3: The same 2 tier application is deployed in the gamma namespace. It must display a green web page on success. Click on the App tab at the top of your terminal to view your application. It is currently failed or unresponsive. Troubleshoot and fix the issue.
+
+
+Stick to the given architecture. Use the same names and port numbers as given in the below architecture diagram. Feel free to edit, delete or recreate objects as necessary.
+
+
+```bash
+controlplane ~ ➜  k get svc
+NAME            TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE
+mysql-service   ClusterIP   10.43.255.33   <none>        3306/TCP         54s
+web-service     NodePort    10.43.183.46   <none>        8080:30081/TCP   54s
+
+controlplane ~ ➜  k describe svc mysql-service 
+Name:              mysql-service
+Namespace:         gamma
+Labels:            <none>
+Annotations:       <none>
+Selector:          name=sql00001 #issue with pod selector
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.43.255.33
+IPs:               10.43.255.33
+Port:              <unset>  3306/TCP
+TargetPort:        3306/TCP
+Endpoints:         <none>
+Session Affinity:  None
+Events:            <none>
+
+controlplane ~ ➜  k describe svc web-service 
+Name:                     web-service
+Namespace:                gamma
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 name=webapp-mysql
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.43.183.46
+IPs:                      10.43.183.46
+Port:                     <unset>  8080/TCP
+TargetPort:               8080/TCP
+NodePort:                 <unset>  30081/TCP
+Endpoints:                10.42.0.14:8080
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+controlplane ~ ➜  k get pods --show-labels 
+NAME                           READY   STATUS    RESTARTS   AGE     LABELS
+webapp-mysql-9b567db7f-982bz   1/1     Running   0          5m23s   name=webapp-mysql,pod-template-hash=9b567db7f
+mysql                          1/1     Running   0          5m23s   name=mysql
+
+```
+
+
+
+```bash
+controlplane ~ ➜  k describe deployments.apps webapp-mysql 
+Name:                   webapp-mysql
+Namespace:              delta
+CreationTimestamp:      Sat, 07 Sep 2024 18:21:13 +0000
+Labels:                 name=webapp-mysql
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               name=webapp-mysql
+Replicas:               1 desired | 1 updated | 1 total | 1 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  name=webapp-mysql
+  Containers:
+   webapp-mysql:
+    Image:      mmumshad/simple-webapp-mysql
+    Port:       8080/TCP
+    Host Port:  0/TCP
+    Environment:
+      DB_Host:      mysql-service
+      DB_User:      sql-user  #error in the user
+      DB_Password:  paswrd
+    Mounts:         <none>
+  Volumes:          <none>
+  Node-Selectors:   <none>
+  Tolerations:      <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   webapp-mysql-57dc5df9f9 (1/1 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  9m29s  deployment-controller  Scaled up replica set webapp-mysql-57dc5df9f9 to 1
+```
+
+### 120. Troubleshooting Test 5: The same 2 tier application is deployed in the epsilon namespace. It must display a green web page on success. Click on the App tab at the top of your terminal to view your application. It is currently failed. Troubleshoot and fix the issue.
+
+```bash
+controlplane ~ ➜  k describe pods mysql 
+Name:             mysql
+Namespace:        epsilon
+Priority:         0
+Service Account:  default
+Node:             controlplane/192.25.200.9
+Start Time:       Sat, 07 Sep 2024 18:32:20 +0000
+Labels:           name=mysql
+Annotations:      <none>
+Status:           Running
+IP:               10.42.0.18
+IPs:
+  IP:  10.42.0.18
+Containers:
+  mysql:
+    Container ID:   containerd://d2d769c3a115f0193e143e64ba8106542cc4aeaa0ebf5b2d65db52047624561a
+    Image:          mysql:5.6
+    Image ID:       docker.io/library/mysql@sha256:20575ecebe6216036d25dab5903808211f1e9ba63dc7825ac20cb975e34cfcae
+    Port:           3306/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Sat, 07 Sep 2024 18:32:22 +0000
+    Ready:          True
+    Restart Count:  0
+    Environment:
+      MYSQL_ROOT_PASSWORD:  passwooooorrddd  #error here
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-c98dx (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-c98dx:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age    From               Message
+  ----    ------     ----   ----               -------
+  Normal  Scheduled  3m10s  default-scheduler  Successfully assigned epsilon/mysql to controlplane
+  Normal  Pulled     3m10s  kubelet            Container image "mysql:5.6" already present on machine
+  Normal  Created    3m10s  kubelet            Created container mysql
+  Normal  Started    3m9s   kubelet            Started container mysql
+```
+
+
+### 121. Troubleshooting Test 6: The same 2 tier application is deployed in the zeta namespace. It must display a green web page on success. Click on the App tab at the top of your terminal to view your application. It is currently failed. Troubleshoot and fix the issue.
+
+
+Stick to the given architecture. Use the same names and port numbers as given in the below architecture diagram. Feel free to edit, delete or recreate objects as necessary.
+
+
+
+### troubleshooting control plane
+
+https://kubernetes.io/docs/tasks/debug/debug-cluster/
+
+check 
+
+```bash
+
+kubectl get nodes #to see the nodes are healthy
+
+kubectl get pods #to see the nodes
+
+kubectl get pods -n kube-system #to see the pods in kube-system namespace is healthy
+
+service kube-apiserver status #to check service status
+
+service kube-controller-manager status
+
+service kubelet status #in worker nodes
+
+service kube-proxy status #in worker nodes
+
+kubectl logs kube-apiserver-master -n kube-system
+
+
+kubectl logs kube-scheduler-controlplane -n kube-system
+```
+
+
+### 124. The cluster is broken. We tried deploying an application but it's not working. Troubleshoot and fix the issue.
+
+Checked pods, deployement and rc
+
+
+```bash
+controlplane ~ ➜  k describe pods app-5f58858856-dnjfz 
+Name:             app-5f58858856-dnjfz
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             <none>  #node is assigned to none issue is their it's schedulers job
+Labels:           app=app
+                  pod-template-hash=5f58858856
+Annotations:      <none>
+Status:           Pending
+IP:               
+IPs:              <none>
+Controlled By:    ReplicaSet/app-5f58858856
+Containers:
+  nginx:
+    Image:        nginx:alpine
+    Port:         <none>
+    Host Port:    <none>
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-8s52m (ro)
+Volumes:
+  kube-api-access-8s52m:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:                      <none>
+
+
+
+controlplane ~ ➜  k get pods -n kube-system 
+NAME                                   READY   STATUS             RESTARTS      AGE
+coredns-768b85b76f-4mp4n               1/1     Running            0             11m
+coredns-768b85b76f-96hwn               1/1     Running            0             11m
+etcd-controlplane                      1/1     Running            0             11m
+kube-apiserver-controlplane            1/1     Running            0             11m
+kube-controller-manager-controlplane   1/1     Running            0             11m
+kube-proxy-47nhv                       1/1     Running            0             11m
+kube-scheduler-controlplane            0/1     CrashLoopBackOff   4 (87s ago)   3m7s
+#crashloop backoff
+
+
+controlplane ~ ➜  k describe pods -n kube-system kube-scheduler-controlplane 
+Name:                 kube-scheduler-controlplane
+Namespace:            kube-system
+Priority:             2000001000
+Priority Class Name:  system-node-critical
+Node:                 controlplane/192.28.249.3
+Start Time:           Sat, 07 Sep 2024 20:01:53 +0000
+Labels:               component=kube-scheduler
+                      tier=control-plane
+Annotations:          kubernetes.io/config.hash: e4007249bf4f8d68970f15caac4f8d27
+                      kubernetes.io/config.mirror: e4007249bf4f8d68970f15caac4f8d27
+                      kubernetes.io/config.seen: 2024-09-07T20:10:00.399309282Z
+                      kubernetes.io/config.source: file
+Status:               Running
+SeccompProfile:       RuntimeDefault
+IP:                   192.28.249.3
+IPs:
+  IP:           192.28.249.3
+Controlled By:  Node/controlplane
+Containers:
+  kube-scheduler:
+    Container ID:  containerd://1aece1f54a4fffff76520aae1092a0d7203b7b6e3d2053c20a3b4e8480843fc6
+    Image:         registry.k8s.io/kube-scheduler:v1.30.0
+    Image ID:      registry.k8s.io/kube-scheduler@sha256:2353c3a1803229970fcb571cffc9b2f120372350e01c7381b4b650c4a02b9d67
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      kube-schedulerrrr
+      --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
+      --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
+      --bind-address=127.0.0.1
+      --kubeconfig=/etc/kubernetes/scheduler.conf
+      --leader-elect=true
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       StartError
+      Message:      failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: exec: "kube-schedulerrrr": executable file not found in $PATH: unknown
+      Exit Code:    128
+      Started:      Thu, 01 Jan 1970 00:00:00 +0000
+      Finished:     Sat, 07 Sep 2024 20:13:30 +0000
+    Ready:          False
+    Restart Count:  5
+    Requests:
+      cpu:        100m
+    Liveness:     http-get https://127.0.0.1:10259/healthz delay=10s timeout=15s period=10s #success=1 #failure=8
+    Startup:      http-get https://127.0.0.1:10259/healthz delay=10s timeout=15s period=10s #success=1 #failure=24
+    Environment:  <none>
+    Mounts:
+      /etc/kubernetes/scheduler.conf from kubeconfig (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kubeconfig:
+    Type:          HostPath (bare host directory volume)
+    Path:          /etc/kubernetes/scheduler.conf
+    HostPathType:  FileOrCreate
+QoS Class:         Burstable
+Node-Selectors:    <none>
+Tolerations:       :NoExecute op=Exists
+Events:
+  Type     Reason   Age                     From     Message
+  ----     ------   ----                    ----     -------
+  Normal   Created  3m22s (x4 over 4m18s)   kubelet  Created container kube-scheduler
+  Warning  Failed   3m22s (x4 over 4m18s)   kubelet  Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: exec: "kube-schedulerrrr": executable file not found in $PATH: unknown
+  Warning  BackOff  2m49s (x12 over 4m16s)  kubelet  Back-off restarting failed container kube-scheduler in pod kube-scheduler-controlplane_kube-system(e4007249bf4f8d68970f15caac4f8d27)
+  Normal   Pulled   2m38s (x5 over 4m18s)   kubelet  Container image "registry.k8s.io/kube-scheduler:v1.30.0" already present on machine
+
+
+### "kube-schedulerrrr" is right
+
+
+controlplane ~ ➜  cat /etc/kubernetes/manifests/kube-scheduler.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    component: kube-scheduler
+    tier: control-plane
+  name: kube-scheduler
+  namespace: kube-system
+spec:
+  containers:
+  - command:
+    - kube-schedulerrrr  # here is the error
+    - --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
+    - --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
+    - --bind-address=127.0.0.1
+    - --kubeconfig=/etc/kubernetes/scheduler.conf
+    - --leader-elect=true
+    image: registry.k8s.io/kube-scheduler:v1.30.0
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10259
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    name: kube-scheduler
+    resources:
+      requests:
+        cpu: 100m
+    startupProbe:
+      failureThreshold: 24
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10259
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    volumeMounts:
+    - mountPath: /etc/kubernetes/scheduler.conf
+      name: kubeconfig
+      readOnly: true
+  hostNetwork: true
+  priority: 2000001000
+  priorityClassName: system-node-critical
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/scheduler.conf
+      type: FileOrCreate
+    name: kubeconfig
+status: {}
+
+
+```
+
+### 125.Even though the deployment was scaled to 2, the number of PODs does not seem to increase. Investigate and fix the issue.
+
+
+Inspect the component responsible for managing deployments and replicasets. 
+
+
+
+```bash
+controlplane ~ ➜  k get pods -n kube-system 
+NAME                                   READY   STATUS             RESTARTS      AGE
+coredns-768b85b76f-4mp4n               1/1     Running            0             23m
+coredns-768b85b76f-96hwn               1/1     Running            0             23m
+etcd-controlplane                      1/1     Running            0             23m
+kube-apiserver-controlplane            1/1     Running            0             23m
+kube-controller-manager-controlplane   0/1     CrashLoopBackOff   6 (94s ago)   7m30s
+kube-proxy-47nhv                       1/1     Running            0             23m
+kube-scheduler-controlplane            1/1     Running            0             8m11s
+
+controlplane ~ ➜  k describe pods -n kube-system kube-controller-manager-controlplane
+
+
+
+
+
+
+```
+
+
+
+
+### Worker Node Failure
+
+```bash
+
+kubectl get nodes
+
+kubectl describe node worker-1 #status of worker node
+
+top #to check memory
+
+service kubelet status #status of kubelet
+
+service kubelet start #to start the kubelet
+
+sudo journalctl -u kubelet #kubelet logs
+
+#check kubelet certificates
+
+openssl x509 -in /var/lib/kubelet/worker-1.crt -text
+
+
+  cat /etc/kubernetes/kubelet.conf #location of kubelet conf file
+
+
+```
+
+```bash
+
+node01 ~ ➜  cat /var/lib/kubelet/config.yaml 
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    cacheTTL: 0s
+    enabled: true
+  x509:
+    clientCAFile: /etc/kubernetes/pki/WRONG-CA-FILE.crt  #this should be the file
+authorization:
+  mode: Webhook
+  webhook:
+    cacheAuthorizedTTL: 0s
+    cacheUnauthorizedTTL: 0s
+cgroupDriver: systemd
+clusterDNS:
+- 10.96.0.10
+clusterDomain: cluster.local
+containerRuntimeEndpoint: ""
+cpuManagerReconcilePeriod: 0s
+evictionPressureTransitionPeriod: 0s
+fileCheckFrequency: 0s
+healthzBindAddress: 127.0.0.1
+healthzPort: 10248
+httpCheckFrequency: 0s
+imageMaximumGCAge: 0s
+imageMinimumGCAge: 0s
+kind: KubeletConfiguration
+logging:
+  flushFrequency: 0
+  options:
+    json:
+      infoBufferSize: "0"
+    text:
+      infoBufferSize: "0"
+  verbosity: 0
+memorySwap: {}
+nodeStatusReportFrequency: 0s
+nodeStatusUpdateFrequency: 0s
+resolvConf: /run/systemd/resolve/resolv.conf
+rotateCertificates: true
+runtimeRequestTimeout: 0s
+shutdownGracePeriod: 0s
+shutdownGracePeriodCriticalPods: 0s
+staticPodPath: /etc/kubernetes/manifests
+streamingConnectionIdleTimeout: 0s
+syncFrequency: 0s
+volumeStatsAggPeriod: 0s
+
+
+node01 ~ ➜  ls /etc/kubernetes/pki/
+ca.crt
+#it's shoudl be ca.crt
+
+
+service kubelet restart
+```

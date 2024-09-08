@@ -2929,7 +2929,6 @@ spec:
           servicePort: 80
 ```
 
-```
 kubectl describe ingress ingress-wear-watch
 # to see ingress rules
 
@@ -2955,6 +2954,36 @@ spec:
           servicePort: 80
 
 ```
+
+creating ingress
+
+```bash
+controlplane ~ ➜  k create ingress ingress-pay -n critical-space --rule="/pay=pay-se
+rvice:8282"
+ingress.networking.k8s.io/ingress-pay created
+
+controlplane ~ ➜  k describe -n critical-space ingress
+Name:             ingress-pay
+Labels:           <none>
+Namespace:        critical-space
+Address:          10.103.5.72
+Ingress Class:    <none>
+Default backend:  <default>
+Rules:
+  Host        Path  Backends
+  ----        ----  --------
+  *           
+              /pay   pay-service:8282 (10.244.0.11:8080)
+Annotations:  <none>
+Events:
+  Type    Reason  Age               From                      Message
+  ----    ------  ----              ----                      -------
+  Normal  Sync    5s (x2 over 60s)  nginx-ingress-controller  Scheduled for sync
+
+
+
+
+
 
 The above file is also going to match the host url, path and specific port. resource sorting through domain names
 
@@ -3109,3 +3138,35 @@ ssh node01
 
 ls /etc/kubernetes/kubelet.conf #where the file are saved
 ```
+
+## Troubleshooting
+
+### Application Failure
+
+compare service and it's selectors to the pods selectors
+
+```bash
+
+k logs web #logs of web pod
+
+k get events #to get more details of what's happening in k8s
+
+k get events --namespace=my-namespace #events in particular name space
+
+k get pod <pod-name> -o yaml #to get more details
+
+
+kubectl logs ${POD_NAME} ${CONTAINER_NAME} #for pod logs
+
+#endpoints of service
+kubectl get endpoints ${SERVICE_NAME}
+```
+
+Debuggin services
+```bash
+kubectl run -it --rm --restart=Never busybox --image=gcr.io/google-containers/busybox sh #for running a conatainer that can be used for debugging
+
+kubectl exec <POD-NAME> -c <CONTAINER-NAME> -- <COMMAND> #to use existing application
+
+
+
