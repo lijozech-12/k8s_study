@@ -1,5 +1,7 @@
 # previous year questionaires and answers.
 
+https://www.youtube.com/watch?v=o_7jlMBHFFA
+
 ### 1.Take a backup of the etcd cluster and save it to /opt/etcd-backup.db
 
 * search for etcd in k8s documentation. and search for backup their will be a command like this.
@@ -635,7 +637,8 @@ kubectl apply -f pod-definition.yaml
 it's a trouble shooting question so there will be an issue. 
 
 ```bash
-kubectl run web --image=nginx --dry-run=client -o yaml > pod-definition.yaml
+kubectl run web-pod --image=nginx --dry-run=client -o yaml > pod-definition.yaml
+vi pod-definition.yaml #then change the name to web
 
 kubectl apply -f pod-definition.yaml
 
@@ -864,6 +867,8 @@ kubectl get pods -n project-a --show-labels #for showing labels in each and ever
 
 #note all the labels. because network policies are working based on this labels.
 
+k -n project-b exec <pod-name> -- ping <ip-of-pod>
+
 
 ```
 
@@ -905,12 +910,12 @@ kubectl create sa gitops -n project-1 #to create service account named gitops in
 
 #then we need to create the role
 
-kubectl create role gitops-role --verb=create --resource=secrets,configmaps
+kubectl create role gitops-role --verb=create --resource=secrets,configmaps -n project-1
 
 kubectl describe role -n project-1 #to see created roles
 
 #now we need to bind role and serviceaccount with rolebindings
-kubectl create rolebinding gitops-rolebinding --role=gitops-role --serviceaccount=project-1:gitops
+kubectl create rolebinding gitops-rolebinding --role=gitops-role --serviceaccount=project-1:gitops -n project-1
 
 #--serviceaccount=namespace:serviceaccountname
 
@@ -1090,7 +1095,7 @@ kubectl -n production autoscale deploy frontend --min=3 --max=5 --cpu-percent=80
 kubectl get hpa -n production #to get hpa 
 ```
 
-### 23. Exposet existing deployment in production namespace named as frontenc throught Nodeport and Nodeport service name should be frontendsvc. weightage 4
+### 23. Expose the existing deployment in production namespace named as frontenc throught Nodeport and Nodeport service name should be frontendsvc. weightage 4
 
 Earlier we exposed pod here we need expose deployment.
 
@@ -1386,9 +1391,9 @@ spec:
       podSelector:
         matchLabels:
           app: service #label of service pod
-    #above condition is and condition. need correct both the condition
+    #above condition is 'and' condition. need correct both the condition
 
-    #below condition is or condition. any one of condition will trigger it.
+    #below condition is 'or' condition. any one of condition will trigger it.
     - namespaceSelector:
       matchLabels:
           namespace: project-b #label of project-b
@@ -1409,6 +1414,7 @@ k -n project-b exec <pod-namefrom> -- ping <ip of machine to check>
 #check the connectivity after this.
 ```
 
+https://www.youtube.com/watch?v=Zm5sy6otLGc 
 
 ### 30. You can find a pod named multi-pod is running in the cluster and that is logging to a volume. You need to insert a sidecar container into the pod that will also read the logs from the volume using this command "tail -f /var/busybox/log/*.log". side specifications give below.
 
@@ -1425,6 +1431,30 @@ kubectl logs multi-pod -c sidecar #to get logs of sidecar container.
 
 add images and mount path accordingly
 also add command: ["sh","-c","tail -f /var/busybox/log/*.log"]
+
+```bash
+spec:
+  containers:
+  - image: nginx:latest
+    name: web-pod
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - mountPath: /var/log/nginx
+      name: hostpath-volume #same volume in both the containers
+  - image: busybox:1.28
+    name: sidecar
+    command: ['sh','-c','tail -f /var/busybox/log/*.log'] #it can access it easily
+    volumeMounts:
+    - mountPath: /var/busybox/log
+      name: hostpath-volume #same volume in both the containers
+  volumes:
+  - hostPath:
+      path: /var/volume
+    name: hostpath-volume
+
+
+```
 
 ### 31.Create a CronJob for running every 2 minuts with busybox image. The job name should be my-job and it should print the current date and time to the console. After running the job save any one of the pod logs to below path /root/logs.txt (2).
 
@@ -1521,7 +1551,29 @@ systemctl start kubelet
 # tehn run 
 k get nodes #to check whether it connected or not.
 
+#check the paths
+
 k run web --image=nginx
+
+vi /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf #edit the configuration file
+```
+
+
+```bash
+
+node01 $ systemctl status kubelet.service 
+● kubelet.service - kubelet: The Kubernetes Node Agent
+     Loaded: loaded (/lib/systemd/system/kubelet.service; enabled; vendor preset: enabled)
+    Drop-In: /usr/lib/systemd/system/kubelet.service.d
+             └─10-kubeadm.conf
+     Active: active (running) since Sun 2024-09-08 18:17:48 UTC; 37min ago
+       Docs: https://kubernetes.io/docs/
+   Main PID: 1123 (kubelet)
+      Tasks: 10 (limit: 2338)
+     Memory: 41.5M
+     CGroup: /system.slice/kubelet.service
+             └─1123 /usr/bin/kubelet --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/k
+
 ```
 
 ### 35. There was a security incident where an intruder was able to access the whole cluster from a single hacked web pod. To prevent this create a NetworkPolicy in default Namespace. It should allow the web-* pods only to: connect to service-* Pods on port 8080. After Implementation, connections from web-* Pods to application-* Pods on port 80 should also be blocked. (weightage 6)
@@ -1726,6 +1778,8 @@ etcdutl --data-dir <data-dir-location> snapshot restore snapshot.db #to take bac
 ```bash
 k get pods 
 
+k edit multi-container-pod #to see the container name
+
 k logs multi-container-pod -c c2 >> /root/log.txt #to storing logs into a file.
 
 #to run the container id login into node01. 
@@ -1740,7 +1794,7 @@ crictl rm <container-id>
 
 kubectl get events --sort-by=.metadata.creationTimestamp > /root/logs.txt
 
-#to get event logs of pods
+#to get event logs of pods #if they ask about events of pods instead of whole cluster.
 kubectl get events --field-selector involvedObject.name=multi-container-pod
 ```
 
@@ -1780,12 +1834,29 @@ k run important -n lion --image=nginx:1.21.6-alpine --dry-run=client -o yaml > 4
 
 k get priorityclasses #to see the important priority classes.
 k edit po <pod-name> -n lion #edit the priorityclasses
+
+
 ```
 
 https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/  search for priority add `priorityClassName:`
 
 search for resource and request
 https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    env: test
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    imagePullPolicy: IfNotPresent
+  priorityClassName: high-priority
+```
 
 ```bash
     resources:
@@ -1818,6 +1889,7 @@ to create priorityclass `kubectl apply -f pc.yaml`
 
 #to add replicaset to already exisiting pods.
 kubectl get po #to get details of pod
+kubectl get po --show-labels #use this label to create the appication
 
 kubect edit po frontend #to see the labels. We need those labels to add pod to the replicaset.
 # there is one label named `tier: frontend`.
@@ -1835,13 +1907,14 @@ kind: ReplicaSet
 metadata:
   creationTimestamp: null
   labels:
-    tier: frontend
+    tier: frontend #label from the existing application.
   name: web-app
 spec:
   replicas: 3
   selector:
     matchLabels:
       tier: frontend
+  # startegy: {} #we don't want startegy in replicaset
   template:
     metadata:
       creationTimestamp: null
@@ -1907,7 +1980,7 @@ spec:
               key: tree
     volumeMounts:
     - name: birke
-      mountPath: etc/birke
+      mountPath: "/etc/birke"
   volumes:
   # You set volumes at the Pod level, then mount them into containers inside that Pod
   - name: birke
@@ -2083,7 +2156,7 @@ spec:
   - from:
     - namespaceSelector:
         matchLabels:
-          app: finance d
+          app: finance 
     ports:
     - protocol: TCP
       port: 8080
@@ -2243,6 +2316,13 @@ kubectl rollout status deployment/nginx-deploy
 kubectl sclae deployment nginx-deploy --replicas=4
 
 kubectl get deploy
+
+
+controlplane $ kubectl rollout history deployment nginx-deploy 
+deployment.apps/nginx-deploy 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         kubectl set image deployment/nginx-deploy nginx=nginx1.19 --record=true
 ```
 
 ### 59. Run a pod using the image redis and ensure the pod is run on each worker node.
@@ -2540,6 +2620,7 @@ spec:
     - ReadWriteMany
   hostPath:
     path: /pv/host-data
+
 controlplane $ k apply -f pv1.yaml 
 persistentvolume/pv-demo created
 controlplane $ k get pv
@@ -2729,6 +2810,18 @@ CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPAC
           kubernetes-admin@kubernetes   kubernetes   kubernetes-admin   
           myuser                        kubernetes   ajeet
 
+
+controlplane $ kubectl auth can-i list pods --as=ajeet
+yes
+controlplane $ kubectl auth can-i list rc --as=ajeet
+no
+controlplane $ kubectl auth can-i create pods --as=ajeet
+yes
+controlplane $ kubectl auth can-i delete pods --as=ajeet
+yes
+controlplane $ kubectl auth can-i get pods --as=ajeet
+yes
+
 ```
 
 ### 77. (a) Create a Nginx pod dns-resolver using image nginx, (b) expose it internally with a service called dns-resolver-service. (c) Check if service name is resolvable from within the cluster.Use the image busybox:1.28 for dns lookup. (b) Save the result in /root/nginx.svc
@@ -2745,11 +2838,32 @@ kubectl expose pod dns-resolver --name=dns-resolver-service --port=80 --target-p
 #creating an image for dns lookup
 kubectl run test-nslookup --image=busybox:1.28 --rm -it --restart=Never -- nslookup dns-resolver-service
 
+controlplane $ kubectl run test-nslookup --image=busybox:1.28 --rm -it --restart=Never -- nslookup dns-resolver-service
+Server:    10.96.0.10
+Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      dns-resolver-service
+Address 1: 10.96.55.158 dns-resolver-service.default.svc.cluster.local
+pod "test-nslookup" deleted
+
 # -- nslookup dns-resolver-service it's the command that needed to be run inside the container it will simply output the result and will not restarted again.
 
 #to save the output to a file
 
 kubectl run test-nslookup --image=busybox:1.28 --rm -it --restart=Never -- nslookup dns-resolver-service > /root/nginx.svc
+
+
+controlplane $ k get pods -o wide 
+NAME           READY   STATUS    RESTARTS   AGE     IP            NODE     NOMINATED NODE   READINESS GATES
+dns-resolver   1/1     Running   0          4m20s   192.168.1.5   node01   <none>           <none>
+task-pv-pod    1/1     Running   0          28m     192.168.1.4   node01   <none>           <none>
+controlplane $ kubectl run test-nslookup --image=busybox --rm -it --restart=Never -- nslookup 192.168.1.5         
+Server:         10.96.0.10
+Address:        10.96.0.10:53
+
+5.1.168.192.in-addr.arpa        name = 192-168-1-5.dns-resolver-service.default.svc.cluster.local
+
+pod "test-nslookup" deleted
 ```
 
 ### 78. A pod “appychip” (image=nginx) in default namespace is not running.​ Find the problem and fix it and make it running.
@@ -3681,6 +3795,13 @@ k run dev-redis --image=redis:alpine
 k run prod-redis --image=reedis:alpine --dry-run=client -o yaml > prod-redis.yaml
 ```
 
+```bash
+tolerations:
+- key: "key1"
+  operator: "Equal"
+  value: "value1"
+  effect: "NoSchedule"
+```
 
 ### 111. Create a pod called hr-pod in hr namespace belonging to the production environment and frontend tier .
 image: redis:alpine
@@ -4465,4 +4586,774 @@ ca.crt
 
 
 service kubelet restart
+```
+
+### 126. List all persistent volumes sorted by capacity, saving the full kubectl output to /opt/pv/pv_list.txt
+
+```bash
+kubectl get pv --sort-by=.spec.capacity.storage > /opt/pv/pv_list.txt
+```
+
+
+### 127. Retrieve the logs from the pod named 'webpod' search for any occurrences of the word 'failed' within those logs, and then save those findings into a file located at '/opt/errorlogs.txt'
+
+```bash
+k logs webpod | grep -i failed > /opt/errorlogs.txt
+```
+
+### 128. Create a nginx pod named nginxpod with label env=prod in production namespace
+
+use --labels option from k run
+
+### 129. Create a pod named 'non-root-pod' using the redis image, with the 'runAsUser' set to 1000 and 'fsGroup' set to 2000.
+
+use security context
+
+### 130. create a mult-container pod named frontend with the image of nginx+redis
+
+
+### 131. Identify pods with the label app=mysql that are executing high CPU workloads and write the name of the pod consuming most CPU to the file /opt/toppods.yaml
+
+```bash
+
+k top pods #high consumption
+
+k top pods -l app=mysql --sort-by=cpu
+
+```
+
+### 132. Verify the count of nodes that are ready (excluding those tainted with NoSchedule) and write the number to /opt/nodecount.txt
+
+
+```bash
+k describe nodes | grep -A 5 taints #after 5 lines
+```
+
+### 133. Schedule a pod as follows. Name: frontend, Image: nginx, Node selector: disk=ssd
+
+```bash
+k get nodes --show-labels | grep disk
+
+```
+
+add node selector inside the spec
+
+```bash
+nodeSelector:
+  disk: ssh
+```
+
+from cka kille code
+### 134. Create a new role binding named sa-creator-binding that will bind to the sa-creator role and apply to a user named Sandra in the default namespace.
+
+Verify that you can create service accounts with the Sandra user using auth can-i
+
+```bash
+controlplane $ k create rolebinding sa-creator-binding --role=sa-creator --user=Sandra
+rolebinding.rbac.authorization.k8s.io/sa-creator-binding created
+controlplane $ k get role,rolebinding
+NAME                                        CREATED AT
+role.rbac.authorization.k8s.io/sa-creator   2024-09-09T12:24:30Z
+
+NAME                                                       ROLE              AGE
+rolebinding.rbac.authorization.k8s.io/sa-creator-binding   Role/sa-creator   14s
+controlplane $ k auth can-i create sa --namespace default --as Sandra
+yes
+controlplane $ k auth can-i create po --namespace default --as Sandra
+no
+```
+
+### 135. Create a service account named dev Create a role binding that will bind the view cluster role to the newly created dev service account in the default namespace. Verify that the dev service account can view pods and services in the default namespace with auth can-i
+
+```bash
+controlplane $ k create sa dev
+serviceaccount/dev created
+controlplane $ k get sa
+NAME      SECRETS   AGE
+default   0         38d
+dev       0         5s
+
+controlplane $ kubectl create rolebinding admin-binding --role=view --serviceaccount=default:dev
+rolebinding.rbac.authorization.k8s.io/admin-binding created
+
+controlplane $ kubectl auth can-i get svc --namespace default --as=system:serviceaccount:default:dev
+yes
+controlplane $ 
+```
+
+### 136. Create a new cluster role named “acme-corp-clusterrole” that can create deployments, replicasets and daemonsets.
+
+```bash
+controlplane $ k create role acme-corp-clusterrole --verb=create --resource=deploy,rc,ds
+role.rbac.authorization.k8s.io/acme-corp-clusterrole created
+controlplane $ k get role
+NAME                    CREATED AT
+acme-corp-clusterrole   2024-09-09T12:45:52Z
+```
+
+### 137. Bind the cluster role 'acme-corp-clusterrole' to the service account ’secure-sa’ making sure the 'secure-sa' service account can only create the assigned resources within the default namespace and nowhere else.
+
+Verify that the service account can only create deployments, replicaSets, and daemonSets in the default namespace.
+
+```bash
+controlplane $ k create rolebinding acme-corp-clusterrole-binding --role acme-corp-clusterrole --serviceaccount=default:secure-s
+a --namespace default
+rolebinding.rbac.authorization.k8s.io/acme-corp-clusterrole-binding created
+controlplane $ k get rolebindings.rbac.authorization.k8s.io -n default 
+NAME                            ROLE                         AGE
+acme-corp-clusterrole-binding   Role/acme-corp-clusterrole   12s
+
+
+#namespace should come first
+
+
+# using 'auth can-i', verify that you can create deployments as the 'secure-sa' service account in the default namespace
+kubectl auth can-i create deploy --namespace default --as=system:serviceaccount:default:secure-sa
+
+# using 'auth can-i', verify that you CANNOT delete daemonSets as the 'secure-sa' service account in the kube-system namespace 
+kubectl auth can-i delete ds --namespace kube-system --as=system:serviceaccount:default:secure-sa
+```
+
+### 138. Run the appropriate command to check the current version of the API server, controller manager, scheduler, kube-proxy, CoreDNS, and etcd.
+
+The output should look similar to the following:
+
+COMPONENT                 NODE           CURRENT    TARGET
+kube-apiserver            controlplane   v1.30.0    v1.30.1
+kube-controller-manager   controlplane   v1.30.0    v1.30.1
+kube-scheduler            controlplane   v1.30.0    v1.30.1
+kube-proxy                               1.30.0     v1.30.1
+CoreDNS                                  v1.11.1    v1.11.1
+etcd                      controlplane   3.5.12-0   3.5.12-0
+
+kubeadm -h
+
+```bash
+kudeadm upgrade plan
+```
+
+### 139. Create a new service account named ’secure-sa’ in the default namespace that will not automatically mount the service account token.
+
+```bash
+controlplane $ k create sa secure-sa --dry-run=client -o yaml > sa.yaml
+controlplane $ vi sa.yaml
+controlplane $ cat sa.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  creationTimestamp: null
+  name: secure-sa
+automountServiceAccountToken: false
+controlplane $ k apply -f sa.yaml 
+serviceaccount/secure-sa created
+controlplane $ k get sa
+NAME        SECRETS   AGE
+default     0         38d
+secure-sa   0         6s
+```
+
+### 140. Create a pod that uses the ‘secure-sa’ service account. Make sure the token is not exposed to the pod.
+
+```bash
+controlplane $ cat pod.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: pod
+  name: pod
+spec:
+  serviceAccountName: secure-sa
+  containers:
+  - image: nginx
+    name: pod
+
+controlplane $ k apply -f pod.yaml 
+pod/pod created
+controlplane $ k get pods -w
+NAME   READY   STATUS              RESTARTS   AGE
+pod    0/1     ContainerCreating   0          9s
+pod    1/1     Running             0          10s
+
+# Verify that the service account token is NOT mounted to the pod
+
+^Ccontrolplane $ kubectl exec secure-pod -- cat /var/run/secrets/kubernetes.io/serviceaccount/token
+Error from server (NotFound): pods "secure-pod" not found
+controlplane $ 
+```
+
+### 141. View the file in your home directory named pod.yaml . Apply the correct toleration to this pod manifest in order for it to successfully get scheduled to node01.
+
+After modifying the pod.yaml file, run the command k apply -f ~/pod.yaml to create the pod.
+
+Then, run the command k get po -o wide to verify that the pod status is Running
+
+HINT: The key, value, and effect have to match the taint
+
+```bash
+controlplane $ k apply -f pod.yaml 
+pod/nginx created
+controlplane $ k get pods -o wide 
+NAME    READY   STATUS    RESTARTS   AGE   IP            NODE     NOMINATED NODE   READINESS GATES
+nginx   1/1     Running   0          10s   192.168.1.4   node01   <none>           <none>
+controlplane $ cat pod.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+  tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "special-user"
+    effect: "NoSchedule"
+```
+
+
+### 142. In the namespace named 012963bd , create a pod named ctrl-pod which uses the nginx image. This pod should be scheduled to the control plane node.
+
+Ensure that the pod is scheduled to the controlplane node.
+
+```bash
+controlplane $ k get pods -n 012963bd 
+NAME       READY   STATUS              RESTARTS   AGE
+ctrl-pod   0/1     ContainerCreating   0          9s
+controlplane $ k get pods -n 012963bd 
+NAME       READY   STATUS    RESTARTS   AGE
+ctrl-pod   1/1     Running   0          13s
+controlplane $ cat pod.yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: ctrl-pod
+  name: ctrl-pod
+  namespace: 012963bd
+spec:
+  nodeName: controlplane  #correct way is using nodeaffinity but this is easier 
+  #since their is no required during scheduling rules
+  containers:
+  - image: nginx
+    name: ctrl-pod
+    resources: {}
+  tolerations:
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Exists"
+    effect: "NoSchedule"
+controlplane $ 
+```
+
+
+### 145. Create a pod with one container that will log to STDOUT
+
+Use kubectl to view the logs from this container within the pod named "pod-logging"
+
+
+```bash
+cat << EOF > pod-logging.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-logging
+spec:
+  containers:
+  - name: main
+    image: busybox
+    args: [/bin/sh, -c, 'while true; do echo $(date); sleep 1; done']
+EOF
+
+controlplane $ k logs pod-logging
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+controlplane $ 
+controlplane $ k logs pod-logging -f
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+Mon Sep 9 15:42:05 UTC 2024
+
+```
+
+### 146. Create a pod that will have two containers, one main container and another sidecar container that will collect the main containers logs
+
+Using kubectl, view the logs from the container named "sidecar"
+
+```bash
+
+cat << EOF > pod-logging-sidecar.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-logging-sidecar
+spec:
+  containers:
+  - image: busybox
+    name: main
+    args: [ 'sh', '-c', 'while true; do echo "$(date)\n" >> /var/log/main-container.log; sleep 5; done' ]
+    volumeMounts:
+      - name: varlog
+        mountPath: /var/log
+  - name: sidecar
+    image: busybox
+    args: [ /bin/sh, -c, 'tail -f /var/log/main-container.log' ]
+    volumeMounts:
+      - name: varlog
+        mountPath: /var/log
+  volumes:
+    - name: varlog
+      emptyDir: {}
+EOF
+
+
+controlplane $ k logs pod-logging-sidecar -c sidecar
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+controlplane $ 
+
+controlplane $ k logs pod-logging-sidecar --all-containers 
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+controlplane $ k logs pod-logging-sidecar --all-containers -f
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+Mon Sep  9 15:44:28 UTC 2024\n
+^C
+```
+
+### 150. Create a deployment named "mysql" that uses the image "mysql:8".
+
+View the deployment and pod, and find out why it's not running
+
+Fix the deployment in order to get the pod in a running state.
+
+```bash
+controlplane $ k logs mysql-5479478c76-l2b4k 
+2024-09-09 15:49:31+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 8.4.2-1.el9 started.
+2024-09-09 15:49:31+00:00 [Note] [Entrypoint]: Switching to dedicated user 'mysql'
+2024-09-09 15:49:31+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 8.4.2-1.el9 started.
+2024-09-09 15:49:31+00:00 [ERROR] [Entrypoint]: Database is uninitialized and password option is not specified
+    You need to specify one of the following as an environment variable:
+    - MYSQL_ROOT_PASSWORD
+    - MYSQL_ALLOW_EMPTY_PASSWORD
+    - MYSQL_RANDOM_ROOT_PASSWORD
+
+k create deploy mysql --image mysql:8
+# in deployment, add
+env:
+  - name: MY_SQL_PASSWORD
+  value: "password"
+```
+
+### 151. Create a configmap named redis-config . Within the configMap, use the key maxmemory with value 2mb and key maxmemory-policy with value allkeys-lru .
+
+HINT: try k create cm -h for command options and examples
+
+```bash
+
+controlplane $ k create cm redis-config --from-literal=maxmemory=2mb --from-literal=maxmemory-policy=allkeys-lru
+configmap/redis-config created
+controlplane $ k describe configmaps redis-config 
+Name:         redis-config
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+maxmemory:
+----
+2mb
+maxmemory-policy:
+----
+allkeys-lru
+
+BinaryData
+====
+
+Events:  <none>
+controlplane $ 
+```
+
+### 152. Create a pod named redis-pod that uses the image redis:7 and exposes port 6379 . Use the command redis-server /redis-master/redis.conf to store redis configuration data and store this in an emptyDir volume.
+
+Mount the redis-config configmap data to the pod for use within the container.
+
+HINT: create the pod YAML with a --dry-run using the following command:
+
+```bash
+
+kubectl run redis-pod --image=redis:7 --port=6379 --dry-run=client -o yaml > redis-pod.yaml
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: redis-pod
+spec:
+  containers:
+  - name: redis
+    image: redis:7
+    ports:
+    - containerPort: 6379
+    command: [ "redis-server", "/redis-master/redis.conf" ]
+    volumeMounts:
+    - name: redis-storage
+      mountPath: /redis-master
+    - name: redis-config
+      mountPath: /redis-master/redis.conf
+      subPath: redis.conf
+  volumes:
+  - name: redis-storage
+    emptyDir: {}
+  - name: redis-config
+    configMap:
+      name: redis-config
+```
+
+### 153. Create a deployment named “apache” that uses the image httpd . Using only kubectl , change the image from httpd to httpd:2.4.54 . List the events of the replicasets in the cluster. Using kubectl , roll back to a previous version of the deployment (the deployment with the image httpd ).
+
+
+
+```bash
+controlplane $ # create a deployment named "apache" that uses the image 'httpd'
+controlplane $ kubectl create deploy apache --image httpd
+deployment.apps/apache created
+controlplane $ 
+controlplane $ # list the deployment and the pods in that deployment
+controlplane $ kubectl get deploy,po
+NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/apache   0/1     0            0           0s
+
+NAME                         READY   STATUS    RESTARTS   AGE
+pod/apache-6c8d9bff6-8829q   0/1     Pending   0          0s
+controlplane $ 
+
+
+controlplane $ kubectl describe rs
+Name:           apache-6c8d9bff6
+Namespace:      default
+Selector:       app=apache,pod-template-hash=6c8d9bff6
+Labels:         app=apache
+                pod-template-hash=6c8d9bff6
+Annotations:    deployment.kubernetes.io/desired-replicas: 1
+                deployment.kubernetes.io/max-replicas: 2
+                deployment.kubernetes.io/revision: 1
+Controlled By:  Deployment/apache
+Replicas:       1 current / 1 desired
+Pods Status:    1 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=apache
+           pod-template-hash=6c8d9bff6
+  Containers:
+   httpd:
+    Image:         httpd
+    Port:          <none>
+    Host Port:     <none>
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Events:
+  Type    Reason            Age   From                   Message
+  ----    ------            ----  ----                   -------
+  Normal  SuccessfulCreate  29s   replicaset-controller  Created pod: apache-6c8d9bff6-8829q
+
+
+Name:           apache-986db45df
+Namespace:      default
+Selector:       app=apache,pod-template-hash=986db45df
+Labels:         app=apache
+                pod-template-hash=986db45df
+Annotations:    deployment.kubernetes.io/desired-replicas: 1
+                deployment.kubernetes.io/max-replicas: 2
+                deployment.kubernetes.io/revision: 2
+Controlled By:  Deployment/apache
+Replicas:       1 current / 1 desired
+Pods Status:    0 Running / 1 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=apache
+           pod-template-hash=986db45df
+  Containers:
+   httpd:
+    Image:         httpd:2.4.54
+    Port:          <none>
+    Host Port:     <none>
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Events:
+  Type    Reason            Age   From                   Message
+  ----    ------            ----  ----                   -------
+  Normal  SuccessfulCreate  1s    replicaset-controller  Created pod: apache-986db45df-gqtw5
+
+```
+
+for rolling out the changes 
+
+
+```bash
+# view the rollout history
+kubectl rollout history deploy apache
+
+# roll back to the previous rollout
+kubectl rollout undo deploy apache
+
+# view the status of the rollout
+kubectl rollout status deploy apache
+
+```
+
+
+### 154. Change the service cluster IP range that's given to each service to 100.96.0.0/12.
+
+```bash
+# change the api server command that hands out service addresses for the cluster
+vim /etc/kubernetes/manifests/kube-apiserver.yaml 
+
+
+# kube-apiserver.yaml
+...
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+    - --advertise-address=172.30.1.2
+    - --allow-privileged=true
+    - --authorization-mode=Node,RBAC
+    - --client-ca-file=/etc/kubernetes/pki/ca.crt
+    - --enable-admission-plugins=NodeRestriction
+    - --enable-bootstrap-token-auth=true
+    - --etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt
+    - --etcd-certfile=/etc/kubernetes/pki/apiserver-etcd-client.crt
+    - --etcd-keyfile=/etc/kubernetes/pki/apiserver-etcd-client.key
+    - --etcd-servers=https://127.0.0.1:2379
+    - --kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt
+    - --kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key
+    - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+    - --proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt
+    - --proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key
+    - --requestheader-allowed-names=front-proxy-client
+    - --requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt
+    - --requestheader-extra-headers-prefix=X-Remote-Extra-
+    - --requestheader-group-headers=X-Remote-Group
+    - --requestheader-username-headers=X-Remote-User
+    - --secure-port=6443
+    - --service-account-issuer=https://kubernetes.default.svc.cluster.local
+    - --service-account-key-file=/etc/kubernetes/pki/sa.pub
+    - --service-account-signing-key-file=/etc/kubernetes/pki/sa.key
+    - --service-cluster-ip-range=100.96.0.0/12
+    - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt
+...
+
+```
+
+### 155. Change the IP address associated with the cluster's DNS Service.
+
+It's the kube-dns service in the kube-system namespace. k -n kube-system edit svc kube-dns
+
+```bash
+# in the service YAML, modify the 'strategy'. save and quit to apply the changes!
+spec:
+  clusterIP: 100.96.0.10
+  clusterIPs:
+  - 100.96.0.10
+  internalTrafficPolicy: Cluster
+...
+```
+
+### 156. Create an Ingress resource that will allow you to resolve the domain name hello.com to the service named apache-svc over port 80 .
+
+```bash
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minimal-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "hello.com"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: apache-svc
+            port:
+              number: 80
+```
+
+### 157. Change the restartPolicy to prevent the pod from automatically restarting.
+
+```bash
+# pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: busybox
+  name: busybox
+spec:
+  containers:
+  - image: busybox
+    name: busybox
+  restartPolicy: Never # change this from Always to Never
+```
+
+### 158. Create a Persistent Volume (PV) named pv-volume that has the following specifications:
+
+a Delete persistentVolumeReclaimPolicy
+Uses the strageClass named local-path
+References a claim named pv-claim in the default namespace
+Uses hostPath volume type, at path /mnt/data
+Has a capacity of 1Gi
+Access mode is set to ReadWriteOnce
+Once you've created the PV, list all the persistentvolumes in the cluster.
+
+
+```bash
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-volume
+spec:
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: "local-path"
+  claimRef:
+    name: pv-claim
+    namespace: default
+  hostPath:
+    path: "/mnt/data"
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+```
+
+### 159.Create a Persistent Volume Claim (PVC) named pvc-claim that has the following specifications:
+
+Uses the storageClass named local-path
+Access mode set to ReadWriteOnce
+Requests 1Gi of storage
+Once you've created the PVC, list all the persistentvolumeclaims in the cluster.
+
+
+```bash
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pv-claim
+  namespace: default
+spec:
+  storageClassName: "local-path"
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+
+### 160. Now that we have created the persistentvolume and the persistentvolumeclaim resources in Kubernetes, let's create a pod that can use the volume.
+
+Create a pod named pv-pod that uses the image nginx with a volume named pv-storage . Mount the volume inside the container at /usr/share/nginx/html and specify the pvc by it's name (pv-claim ).
+
+After you've created the pod, list all the pods in the default namespace.
+
+```bash
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pv-pod
+spec:
+  containers:
+    - name: pv-container
+      image: nginx
+      volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: pv-storage
+  volumes:
+    - name: pv-storage
+      persistentVolumeClaim:
+        claimName: pv-claim
 ```

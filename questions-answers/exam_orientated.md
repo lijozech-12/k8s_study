@@ -77,4 +77,55 @@ kubectl get nodes --sort-by=.status.capacity.cp #to sort in a specific order.
 ```
 
 
+### Last minute commands
+```bash
+
+k logs multi-container-pod -c c2 >> /root/log.txt
+
+k -n management get pod -o yaml | grep -i priority -B 20 
+
+#to 
+
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+  nodeSelector:
+    kubernetes.io/hostname: controlplane #labels of controlplane node
+
+controlplane $ k get nodes --show-labels   
+NAME           STATUS   ROLES           AGE   VERSION   LABELS
+controlplane   Ready    control-plane   38d   v1.30.0   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=controlplane,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+node01         Ready    <none>          38d   v1.30.0   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=node01,kubernetes.io/os=linux
+
+
+# to remove taint
+
+kubectl taint no controlplane node-role.kubernetes.io/control-plane:NoSchedule-
+
+# to set context
+kubectl config use-context kubernetes-admin@kubernetes
+
+
+#to store it in specific file
+etcdctl snapshot restore /opt/cluster_backup.db --data-dir /root/default.etcd | tee restore.txt
+
+#troubelshooting
+initContainers:
+  - name: init-container
+    image: busybox
+    command:
+      - sh
+      - "-c"
+      - echo 'Welcome To KillerCoda!'
+```
+
+
 
