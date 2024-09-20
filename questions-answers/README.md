@@ -1118,7 +1118,7 @@ k describe pods task-pv-pod #see pod issues
 # there will be a temporary file will be created
 # then delete the pods
 # use temp file to create
-k apply -f <tmp location?
+k apply -f <tmp location>
 ```
 
 ### 25. Deply a pod with the following specifications:. (Pod Name: web-pod, Image: httpd, Node: Node01) Note: do not modify any settings on master and worker nodes. (weightage 6)
@@ -5356,4 +5356,25 @@ spec:
     - name: pv-storage
       persistentVolumeClaim:
         claimName: pv-claim
+```
+
+### 161. Part I:
+
+Create a Kubernetes ClusterIP service named nginx-service . This service should expose to nginx-deployment , using port 8080 and target port 80
+Part II:
+
+Retrieve and store the IP addresses of the pods. Sort the output by their IP addresses in Ascending order and save it to the file pod_ips.txt in the following format:
+
+```bash
+controlplane $ k get pods -o jsonpath='{.items[*].status.podIPs}'     
+[{"ip":"192.168.1.5"}] [{"ip":"192.168.1.6"}] [{"ip":"192.168.1.4"}]controlplane $ k get pods -o jsonpath='{.items[*].status.podIPs}' ^C
+controlplane $ k get pods -o jsonpath='{.items[*].status.podIPs}' | tr ' ' '\n' | sort
+[{"ip":"192.168.1.4"}]
+[{"ip":"192.168.1.5"}]
+[{"ip":"192.168.1.6"}]
+controlplane $ k get pods -o jsonpath='{.items[*].status.podIPs}' | tr ' ' '\n' | sort > pod_ips.txt
+controlplane $ cat pod_ips.txt 
+[{"ip":"192.168.1.4"}]
+[{"ip":"192.168.1.5"}]
+[{"ip":"192.168.1.6"}]
 ```
