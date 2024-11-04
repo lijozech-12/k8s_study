@@ -876,21 +876,334 @@ new NodePort:
 
 * To use a service, an advanced application can talk to the k8s API directly to look up endpoints and call them. The K8s API even has the capability to "watch" objects and be notified as soon as they change. In this way, a client can react immediately as soon as the IPs associated with a service change.
 
+#### Manual Service Discovery
+
+K8s is built on top of label selectors over Pods. That means that you can use the K8s API to do rudimentary service discovery without using a Service object at all!. 
+ 
+```
+ $ kubectl get pods -o wide --selector=app=alpaca
+ NAME                         ... IP          ...
+ alpaca-prod-3408831585-bpzdz ... 10.112.1.54 ...
+ alpaca-prod-3408831585-kncwt ... 10.112.2.84 ...
+ alpaca-prod-3408831585-l9fsq ... 10.112.2.85 ...
+ ```
+
+We can always find the pods we are interested in using labels
+
+#### Kube-proxy and Cluster IPs
+
+ 
+ Cluster IPs are stable virtual IPs that load balance traffic across all of the endpoints in a service. This magic is performed by a component running on every node in the cluster calledd the kube-proxy. \
+
+ The kube-proxy watches for new services in the cluster via the API server. It then programs a set of `iptables` rules in the kernel of that host to rewrite the destinations of packets so they are directed at one of the endpoints for that service. If the set of endpoints for a service changes (due to Pods coming and going or due to a failed readiness check), the set of `iptables` rules are rewritten.
+
+ Cluster IP is usually assigned by the API server as the service is created. But when user can specify a specific cluster IP when creating. But it cannot be modified without deleting and re-creating the Service Object.
+
+#### Cluster IP Environment Variables.
+
+Using DNS services to find cluster IPs is the normal method. There are some older mechanisms that may still be in user. One of these is injecting a set of environment variables into Pods as they start up.
+
+
+### Connecting with Other Environments.
+
+while it is great to have service discovery within your own cluster, many real-world applications actually require that you integrate more cloud native applications
+deployed in kubernetes with applications deployed to more legacy environments. additionally you may need to integrate a k8s cluster in the cloud 
+with infrastructure that has been deployed on-premise.
+
+#### Connecting to Resources outside of a Cluster
+
+When you are connecting k8s to legacy resources outside of the cluster, you can use selector-less services to k8s service with manually assigned
+IP address that is outside of the cluster. That way, k8s service discovery via DNS works as expected, but the network traffic itself
+flows to an external resource.
+
+To create a selector-less service, you remove the `spec.selector` field from your resource, while leaving the `metadata` and the `ports`
+sections unchanged. Becuase your service has no selector, no endpoints are automatically added to the service. This means that you must
+add them manually. Typically the endpoint that you will add will be a fixed IP address (e.g, the IP address of your database server)
+so you only need to add it once.
+
+But if service ever changes, you will need to update the corresponding endpoint resource.
+
+```
+ apiVersion: v1
+ kind: Endpoints
+ metadata:
+  # This name must match the name of your service
+  name: my-database-server
+ subsets:
+  - addresses:
+      # Replace this IP with the real IP of your server
+      - ip: 1.2.3.4
+    ports:
+      # Replace this port with the port(s) you want to expose
+      - port: 1433
+```
+
+
+#### Connecting External Resources to Service Inside a Cluster.
+
+Connection external resouces to kuberenets services is somewhat trickier. If your cloud provider supports it, the easiest thing to do is to create an 
+"internal" load balancer, as described above that lives in your VPN and deliver traffic from a fixed IP address into the cluster.
+You can then use traditional DNS to make this IP address available to external resouces.
+
+If the internal load balancer isn't available, you can use `NodePort` service to expose the service on the IP addresses of the nodes
+in the cluster. You can then either  program a physical loadbalaner to serve traffic to those nodes, or use DNS-based load-balancing to
+spread traffic between the nodes.
+
+another complex option is include running the full kube-proxy on a external resource and progrmming that machine to use the DNS server
+in the k8s cluster.
+
+
+## 8 HTTP Load Balancing with Ingress
+
+Normal k8s service operate at level 4 of OSI model. so only forward TCP and UDP connections and doesn't look inside those connections.
+Because of this hosting many applications on a cluster uses many different exposed services. In the case where these services are type:
+`NodePort`, you'll have to have clients connect to a unique port per service. In the case where these service are type: 'LoadBalancer' 
+you'll be allocating (expensive) cloud resources for each service.
+
+We can do virtual hosting that means hosting many HTTP sites on a single IP address.
+It will accept incoming connections on HTTP(80) and HTTPS(443) ports. The program then parses the the connection based on the Host header 
+and the URL path that is requested.
+
+This HTTP based load-balancing system is called `Ingress`.
+
+```
+ apiVersion: networking.k8s.io/v1
+ kind: Ingress
+ metadata:
+  name: path-ingress
+ spec:
+  rules:
+  - host: bandicoot.example.com
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+          backend:
+            service:
+              name: bandicoot
+              port:
+                number: 8080
+      - pathType: Prefix
+        path: "/a/"
+        backend:
+          service:
+            name: alpaca
+            port:
+              number: 8080
+ ```
+
+ When there are multiple paths on the same host listed in the Ingress system, the longest prefix matches. So, in this example, traffic
+ starting with /a/ is forwarded to the `alpaca` service, while all other traffic (starting with /) is directed to the bandicoot service.
+
+
+### Multiple Ingress Objects.
+
+If you specify multiple ingress objects, hte ingress controllers should read them all and try to merge them into a coherent configuration.
+
+For duplicate and conflicting configurations the behaviour is undefined. It is likely that different ingress config will behave differently. 
+
+Even single configuration will may do different things depending on nonobvious factors.
+
+### Ingress and Namespaces.
+
+Ingress interacts with namesapces in some nonobvious ways.
+Due to an abundance of securiyt caution, ingress object can refer to only an upstream service in the same namespace. This means that you can't use an ingress object to point to subpath to a service in anothre namespace.
+
+
+However multiple ingress object in different namesapces can specify subpaths for the same host. These ingress object are then merged to come up with the final config for the ingress controller.
+
+### Path Rewriting. 
+
+Some ingress controlled implementations support, optionally, doing path rewriting.
+This can be used to modify the path in the HTTP request as it gets proxied.
+
+This is usually specified by an annotation on the Ingress object and applies to all requests that are specified by that object.
+
+
+For example, if we were using
+ the NGINX Ingress controller, we could specify an annotation of `nginx.ingress
+ .kubernetes.io/rewrite-target: /`. 
+ 
+ Path rewriting introduce to bugs. Can sometimes show `/app-path` instead of `/sub-path`. Since web applications assume they can link withing themselves using absolute paths.
+
+ For these reason it's best avoid subpath if you can't help it.
+
+
+ ### Serving TLS
+
+ When Serving websites, it is becoming increasingly necessary to do so securely using TLS and HTTPS. Ingress supports this ( as do most INgress controllers).
+
+
+You can also create a Secret imperatively with
+```
+ kubectl create secret tls <secret-name> --cert <certificate-pem-file>--key <private-key-pem-file>
+ ```
+
+tls-secret.yaml
+
+```
+ apiVersion: v1
+ kind: Secret
+ metadata:
+    creationTimestamp: null
+    name: tls-secret-name
+ type: kubernetes.io/tls
+ data:
+    tls.crt: <base64 encoded certificate>
+    tls.key: <base64 encoded private key>
+```
+
+Once you have the certificate uploaded, you can reference it in an Ingress object. Again, if multiple ingress objectes specify certificates for the same hostnamem, the behaviour is undefined.
+
+tls-ingress.yaml
+
+```
+ apiVersion: networking.k8s.io/v1
+ kind: Ingress
+ metadata:
+    name: tls-ingress
+ spec:
+  tls:
+    - hosts:
+      - alpaca.example.com
+      secretName: tls-secret-name
+  rules:
+  - host: alpaca.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: alpaca
+          servicePort: 8080
+```
+
+Uploading and managing TLS secretes can be difficult come with cost.
+
+Use non-profie "Let's Encrypt" running a free certificate authoriy that is API-Driven. since it is API-Driven, it is possible to set up a K8s cluster that automatically fetches and installs TLS certificates for you.
+also use 'certmanager'
+
+### Alternate Ingress Implementations.
+
+The most popular generic Ingress controller is probably the open source NGINX
+ Ingress controller. Be aware that there is also a commercial controller based on the
+ proprietary NGINX Plus. The open source controller essentially reads Ingress objects
+ and merges them into an NGINX configuration file. It then signals to the NGINX
+ process to restart with the new configuration (while responsibly serving existing
+ in-flight connections). The open source NGINX controller has an enormous number
+ of features and options exposed via annotations.
+
+
+## 9 ReplicaSets
+
+Redundancy
+  Failure toleration by running multiple instances.
+Scale
+ Higher request-processing capacity by running multiple instances.
+Sharding
+ Different replicas can handle different parts of a computation in parallel.
+
+Replicaset act as a cluster wide Pod manager
+
+
+### Reconciliation Loops
+
+Reconciliation loop is constantly running, observing the current stat of the world and taking action to try to make the observed state match teh desired state.
+
+There are many benefits to the reconciliation-loop approach to managing state. It is an inherently goal-driven, self-healing system, yet it can often be easily expressed in a few lines of code.
+
+even thought the reconciliation loop for RS is a single loop, yet it handles user actions to scale up or scale down the RS as well as node failures or node rejoining the cluster after being absent.
 
 
 
+### Relating Pods and ReplciaSets
+
+Decoupling is the theme of k8s. all core concepts of k8s are modular with respect to each other and that they are swappable and replaceable with other components.
+
+Relations b/w RS and pods are loosely coupled. RS do not own the pods they create.
+
+RS uses label queries to find out the pods they are managing. 
+
+RS that create multiple pods and the services that load balance to those pods are also totally seperate, decoupled API objects.
+Decoupling pods and RS enables several important behaviours, discussed in the following sections.
+
+##### Adopting Existing Containers.
+
+Since RS is decoupled with pods it  can adopt an existing pods and scale out additonal copies of those containers. Like that we move from single imperative pod to a replicated set of pods managed by a RS.
+
+##### Quarantining Containers.
+
+Pod-level health check will automatically restart a pod when server misbehving. But if the health checks are incomplete the pods will be part of replicated set. 
+IF we kill the pod that would leave them with only logs to debug the problem.
+Instead you can modify the set of labels on the sick Pod. Doing so will disassociate it from the RS and service sot that you can debug the pod.
+
+RS will notice the pod is missing and create a new pod. But since the pod is still running it is available to developer for interactive debugging, which significantly more valuable than debugging from logs.
 
 
 
+### Designing with ReplicasSets.
+
+RS is designed for stateless services.
+
+### Replicaset Spec
+
+All replciaset should have unique name. `metadata.name`
+
+```
+ apiVersion: apps/v1
+ kind: ReplicaSet
+ metadata:
+  labels:
+    app: kuard
+    version: "2"
+  name: kuard
+ spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kuard
+      version: "2"
+  template:   #pod template in replica set
+    metadata:
+      labels:
+        app: kuard
+        version: "2"
+    spec:
+      containers:
+        - name: kuard
+        image: "gcr.io/kuar-demo/kuard-amd64:green"
+ ```
 
 
+###### IMportant commands
 
+```bash
+#creating RS
 
+kubectl apply -f kuard-rs.yaml
 
+kubectl get pods 
 
+# Inspecting a ReplicaSet
 
+kubectl describe rs kuard
 
+# Finding a RS from a Pod
 
+Kubectl get pods <pod-name> -o=jsonpath='{.metadata.ownerReferences[0].name}'
 
+# Finding a set of pods for a ReplicaSet
 
+kubectl get pods -l app=kuard,version=2
 
+#Imperative scaling with kubectl scale
+
+kubectl scale replicasets kuard --replicas=4
+
+```
+
+### Autoscaling a ReplicaSet
+
+Autoscaling requires a metric-server in your cluster. The metrics-server keeps track of metrics and provides an API for consuming metrics that HPA uses when making scaling decisions.
+
+```bash
+kubectl autoscale rs kuard --min=2 --max=5 --cpu-percent=80
+ ```
