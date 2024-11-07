@@ -1207,3 +1207,254 @@ Autoscaling requires a metric-server in your cluster. The metrics-server keeps t
 ```bash
 kubectl autoscale rs kuard --min=2 --max=5 --cpu-percent=80
  ```
+
+## 10 Deployments
+
+Helps to rollout
+
+Deployment can be represented as a declarative YAML object that provides the details about what you want to run.
+
+It will help to move from one version easily.
+
+Since the deployment controller runs on server side or k8s cluster itself. This means you can do rollout even from place without proper interent
+connectivity
+
+Like even from a phone
+
+deployment.yaml
+```
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+  name: kuard
+  labels:
+    run: kuard
+ spec:
+  selector:
+    matchLabels:
+      run: kuard
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        run: kuard
+    spec:
+      containers:
+      - name: kuard
+        image: gcr.io/kuar-demo/kuard-amd64:blue
+
+```
+
+```bash
+
+# for creating deployment
+kubectl create -f kuard-deployment.yaml
+
+
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl get deployments kuard -o jsonpath --template "{.spec.selector.matchLabels}"  
+{"run":"kuard"}
+
+# The deployments also contains the RS.
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl get replicasets --selector=run=kuard
+NAME               DESIRED   CURRENT   READY   AGE
+kuard-558d489dd5   1         1         1       6m10s
+
+
+# Scaling the Deployment
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl scale deployments kuard --replicas=2
+deployment.apps/kuard scaled
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl get deployments kuard
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+kuard   2/2     2            2           7m8s
+
+# To get more details on deployments
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl describe deployments kuard
+Name:                   kuard
+Namespace:              default
+CreationTimestamp:      Thu, 07 Nov 2024 23:39:40 +0530
+Labels:                 run=kuard
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               run=kuard
+Replicas:               2 desired | 2 updated | 2 total | 2 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  run=kuard
+  Containers:
+   kuard:
+    Image:        gcr.io/kuar-demo/kuard-amd64:blue
+    Port:         <none>
+    Host Port:    <none>
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Progressing    True    NewReplicaSetAvailable
+  Available      True    MinimumReplicasAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   kuard-558d489dd5 (2/2 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  9m8s   deployment-controller  Scaled up replica set kuard-558d489dd5 to 1
+  Normal  ScalingReplicaSet  2m11s  deployment-controller  Scaled up replica set kuard-558d489dd5 to 2 from 1
+
+
+
+```
+
+
+Even thought we can scale the deployment using kubectl scale command(imperatively). It's better to do it using YAML files ( Declratively). 
+```
+# Like changing this
+spec:
+  replicas: 3
+```
+
+Then run ``` Kubectl apply -f kuard-deployment.yaml ```
+
+We can Also Update the container image
+
+```bash
+
+#change the following in the file 
+      containers:
+      - image: gcr.io/kuar-demo/kuard-amd64:green
+        imagePullPolicy: Always
+
+# and run the below commands
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl apply -f .\kuard-deployment.yaml
+deployment.apps/kuard configured
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl get pods
+NAME                     READY   STATUS              RESTARTS   AGE
+kuard-558d489dd5-5jsk8   1/1     Running             0          6s
+kuard-558d489dd5-mjzcj   1/1     Running             0          6s
+kuard-558d489dd5-vhn24   1/1     Running             0          19m
+kuard-7b47775588-5vd29   0/1     ContainerCreating   0          6s
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+kuard-7b47775588-5vd29   1/1     Running   0          16s
+kuard-7b47775588-flsnw   1/1     Running   0          9s
+kuard-7b47775588-mhxf7   1/1     Running   0          8s
+
+
+# You can see the image changed from blue to green
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl get deployments kuard -o jsonpath --template "{.spec.template.spec.containers}"      
+[{"image":"gcr.io/kuar-demo/kuard-amd64:green","imagePullPolicy":"IfNotPresent","name":"kuard","resources":{},"terminationMessagePath":"/dev/termination-log","terminationMessagePolicy":"File"}]
+
+
+
+# if you wanna rollout the changes
+kubectl rollout pause deployments kuard
+
+# if you wanna pause the deployments rollout
+
+kubectl rollout pause deployments kuard
+
+# if you wann restart the roll out and found there is no issues in it.
+kubectl rollout resume deployments kuard
+
+```
+
+If you wanna see the rollout happened and the details below the commands and the example outputs
+
+```bash
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments>  kubectl rollout history deployment kuard
+deployment.apps/kuard 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl rollout history deployment kuard --revision=2
+deployment.apps/kuard with revision #2
+Pod Template:
+  Labels:       pod-template-hash=7b47775588
+        run=kuard
+  Containers:
+   kuard:
+    Image:      gcr.io/kuar-demo/kuard-amd64:green
+    Port:       <none>
+    Host Port:  <none>
+    Environment:        <none>
+    Mounts:     <none>
+  Volumes:      <none>
+
+
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl rollout history deployment kuard --revision=1
+deployment.apps/kuard with revision #1
+Pod Template:
+  Labels:       pod-template-hash=558d489dd5
+        run=kuard
+  Containers:
+   kuard:
+    Image:      gcr.io/kuar-demo/kuard-amd64:blue
+    Port:       <none>
+    Host Port:  <none>
+    Environment:        <none>
+    Mounts:     <none>
+  Volumes:      <none>
+
+  ```
+
+To rollback to the change previous version use `kubectl rollout undo deployments kuard`
+
+```bash
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl rollout undo deployment kuard
+deployment.apps/kuard rolled back
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl rollout history deployment kuard             
+deployment.apps/kuard 
+REVISION  CHANGE-CAUSE
+3         <none>
+4         <none>
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl rollout history deployment kuard --revision=4
+deployment.apps/kuard with revision #4
+Pod Template:
+  Labels:       pod-template-hash=7b47775588
+        run=kuard
+  Containers:
+   kuard:
+    Image:      gcr.io/kuar-demo/kuard-amd64:green
+    Port:       <none>
+    Host Port:  <none>
+    Environment:        <none>
+    Mounts:     <none>
+  Volumes:      <none>
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments>
+```
+
+We can also rollback to specific revision in the history using ``--to-revision``
+
+```bash
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl rollout undo deployments kuard --to-revision=3
+deployment.apps/kuard rolled back
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl rollout history deployment kuard              
+deployment.apps/kuard 
+REVISION  CHANGE-CAUSE
+4         <none>
+5         <none>
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl rollout undo deployments kuard --to-revision=5
+deployment.apps/kuard skipped rollback (current template already matches revision 5)
+```
+
+### Deployment Strategies
+
+K8s Deployment supports 2 different rollout strategies, `Recreate` and `RollingUpdate`
+
+#### Recreate Strategy
+
+Simpler of the two. It simply updates the RS it managed to use the new image and terminates all of the Pods associated with the Deployment. The ReplicaSet notices that it no longer has any replcias and re-creates all Pods using the new image. Once the Pods are re-created, they are running the new version.
