@@ -1458,3 +1458,339 @@ K8s Deployment supports 2 different rollout strategies, `Recreate` and `RollingU
 #### Recreate Strategy
 
 Simpler of the two. It simply updates the RS it managed to use the new image and terminates all of the Pods associated with the Deployment. The ReplicaSet notices that it no longer has any replcias and re-creates all Pods using the new image. Once the Pods are re-created, they are running the new version.
+
+While this is simple and fast, it will result in workload downtime. 
+
+It should be using only for test Deployments where a service downtime is acceptable
+
+#### RollingUpdate Strategy
+
+Generally preferable strategy for any user-facing service.
+
+Slower than Recreates but more sophisticated and robust.
+
+Using this we can rollout new version while still receiving user traffic, without any downtime.
+
+It works by updating few pods at a time, moving incrementally until all of the pods are running the new version of your software.
+
+##### Managing multiple versions of your service.
+
+While doing rolling update it will cause your new version and old version are service will be receiving requests and serving traffic. 
+
+This means you need to build a software where each of its clients, is capable of taling interchangeably with both a slightly older and slightly newer version of your sw.
+
+You need to have maintain backward and forward compatibilty for reliable updates.
+
+##### Configuring a rolling update
+
+We can tune the `RollingUpdate` according to our needs.
+There is two parameters `maxUnavailable` and `maxSurge`.
+
+`maxUnavailabe` means the maximum no of pods that can be unavailable during a rolling update. It can either set for a absolute number (eg 3,4,5... ) or to percentage (eg. 20%, ) the percentage of replicas that can be unavailable. Using percentage is more good apporach. But if you want an absolute number you can using this.
+
+It will help to tune how quickly rolling update will act. if you say `50%` it will tune down to `50%` of original size. and with on `50%` of service capacity at times.
+
+If you want `100%` availabilty set to it `0` it will create additional resources and delete the old one. like if you desire 4 resource it with create 5-8 resource at a time (including old 4) and remove the old one.
+We can control it using `maxSurge` parameters.
+
+`maxSurge` can be a number or percentage.
+
+##### Slowing Rollouts to Ensure Service Health.
+
+Staged rollout are meant to ensure that the rollout results in a healthy, stable service running the new software version. To do this, the deployment controller alwasy waits until a pod reporst that it is ready before moving on to update the next pod.
+
+But sometimes being ready is not give you suffiecinet confidence that pod is actually behaving correctly.
+We can waith a period of time to have a high confidence that the new version is operatign correctly before you move on to updating the next pod
+
+```bash
+spec:
+  minReadySeconds: 60
+```
+
+Setting minReadySeconds to 60 indicates that the Deployment must wait for 60
+ seconds after seeing a Pod become healthy before moving on to updating the next
+ Pod.
+
+Also we can set a timeout that limits how long the system will wait. To help it out of a deadlocks. In the absence of timeout, the deployment controller will stall your rollout forever.
+
+For having timeout period. we can give paramete progress DeadlineSeconds
+```bash
+ spec:
+  progressDeadlineSeconds: 600
+```
+
+To delete deployement
+```bash
+kubectl delete deployments kuard
+
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl delete -f .\kuard-deployment.yaml
+deployment.apps "kuard" deleted
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments> kubectl get deployments
+No resources found in default namespace.
+PS D:\My_projects\k8s_study\yamlfiles\10Deployments>
+```
+
+## 11 DaemonSets
+
+Replicating Pod on every node.
+It is used to deploy system daemons such as log collectors and monitoring agents, which typically must run on every
+node. 
+It works like rs. both create Pods that are expected to be long-running services and ensure that the desired state and the observed state
+of the cluster match.
+
+RS should be used where the application is completely decoupled from the node and you can run multiple copies on
+the give witout special consideration.
+
+DaemonSet should used when copies should be run on all the nodes.
+
+### DaemonSet scheduler
+
+by default, daemonset will create a copy of a pod on every node unless a node selector is used, which will limited
+elegible node to those with matching set of labels.
+
+fluentd.yaml
+```bash
+ apiVersion: apps/v1
+ kind: DaemonSet
+ metadata:
+  name: fluentd
+  labels:
+    app: fluentd
+ spec:
+  selector:
+    matchLabels:
+      app: fluentd
+ template:
+  metadata:
+    labels:
+      app: fluentd
+  spec:
+    containers:
+    - name: fluentd
+      image: fluent/fluentd:v0.14.10
+      resources:
+        limits:
+          memory: 200Mi
+        requests:
+          cpu: 100m
+          memory: 200Mi
+      volumeMounts:
+      - name: varlog
+        mountPath: /var/log
+      - name: varlibdockercontainers
+        mountPath: /var/lib/docker/containers
+        readOnly: true
+    terminationGracePeriodSeconds: 30
+    volumes:
+    - name: varlog
+      hostPath:
+        path: /var/log
+    - name: varlibdockercontainers
+      hostPath:
+        path: /var/lib/docker/containers
+ ```
+
+Applying the daemonset
+
+```bash
+PS D:\My_projects\k8s_study\yamlfiles\11DaemonSets> kubectl apply -f .\fluentd.yaml
+daemonset.apps/fluentd created
+
+PS D:\My_projects\k8s_study\yamlfiles\11DaemonSets> kubectl describe daemonset fluentd
+Name:           fluentd
+Selector:       app=fluentd
+Node-Selector:  <none>
+Labels:         app=fluentd
+Annotations:    deprecated.daemonset.template.generation: 1
+Desired Number of Nodes Scheduled: 1
+Current Number of Nodes Scheduled: 1
+Number of Nodes Scheduled with Up-to-date Pods: 1
+Number of Nodes Scheduled with Available Pods: 1
+Number of Nodes Misscheduled: 0
+Pods Status:  1 Running / 0 Waiting / 0 Succeeded / 0 Failed
+
+PS D:\My_projects\k8s_study\yamlfiles\11DaemonSets> kubectl get pods -l app=fluentd -o wide
+NAME            READY   STATUS    RESTARTS   AGE   IP           NODE      NOMINATED NODE   READINESS GATES
+fluentd-2r6fq   1/1     Running   0          8m    10.42.0.40   lijospc   <none>           <none>
+```
+
+### Limiting DaemonSets to Specific Nodes
+
+Sometimes we need to deploy Pod to only a subset of nodes. Maybe someworkload that requires a GPU or access to fast storage only availale on a subest of nodes in you cluster. 
+We can use node labels to tag specific nodes that meet workload requirements.
+
+#### Adding Labels to Nodes
+
+```bash
+$ kubectl label nodes lijospc ssd=true
+node/lijospc labeled
+
+lijoz@LijosPC MINGW64 /d/My_projects/k8s_study/yamlfiles/11DaemonSets (main)
+$ kubectl get nodes
+NAME      STATUS   ROLES                  AGE    VERSION
+lijospc   Ready    control-plane,master   6d7h   v1.30.6+k3s1
+
+lijoz@LijosPC MINGW64 /d/My_projects/k8s_study/yamlfiles/11DaemonSets (main)
+$  kubectl get nodes --selector ssd=true
+NAME      STATUS   ROLES                  AGE    VERSION
+lijospc   Ready    control-plane,master   6d7h   v1.30.6+k3s1
+```
+
+#### Node Selectors
+
+nginx-fast-storage.yaml
+
+```bash
+apiVersion: apps/v1
+kind: "DaemonSet"
+metadata:
+  labels:
+    app: nginx
+    ssd: "true"
+  name: nginx-fast-storage
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+      ssd: "true"
+  template:
+    metadata:
+      labels:
+        app: nginx
+        ssd: "true"
+    spec:
+      nodeSelector:
+        ssd: "true"
+      containers:
+      - name: nginx
+        image: nginx:1.10.0
+```
+
+```bash
+lijoz@LijosPC MINGW64 /d/My_projects/k8s_study/yamlfiles/11DaemonSets (main)
+$ kubectl apply -f nginx-fast-storage.yaml
+daemonset.apps/nginx-fast-storage created
+
+lijoz@LijosPC MINGW64 /d/My_projects/k8s_study/yamlfiles/11DaemonSets (main)
+$ kubectl get daemonsets
+NAME                 DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+fluentd              1         1         1       1            1           <none>          22m
+nginx-fast-storage   1         1         0       1            0           ssd=true        16s
+```
+
+#### Updating a DaemonSet
+
+It work similarily like rolling update in deployments.
+
+`spec.minReadySeconds`
+  Determines how long a Pod must be “ready” before the rolling update proceeds
+  to upgrade subsequent Pods
+
+`spec.updateStrategy.rollingUpdate.maxUnavailable`
+  Indicates how many Pods may be simultaneously updated by the rolling update
+
+## 12 Jobs
+
+While long-running processes makeup the large majority of workloads that run on a k8s cluster, there is often a need to run short-lived, one-off tasks. The Job object is made for handling these types of tasks.
+
+Job creates a pod until successful termination (for instance, exit with 0).
+In regular pod will continually restar regardless of it's exit code. 
+Jobs are useful for things you only want to do once, such as database migrations or batch jobs. If you run a pod task would run in a loop, cotinually repopulating the database after every exit.
+
+### The Job Object
+
+The Job object is responsible for createing and managing pods defined in a template in the job specifications. 
+These pods generally run until successful completion.
+The job object coordinates running a number of Pods in parallel.
+
+If the Pod fails before successful termination, the job controller will create a new Pod based on the Pod template in the job specification.
+The pod won't be scheduled fi scheduler does not find the required resources.
+There is small chance that duplicate pods will be created for a specific task during certain failure scenarios.
+
+### Job Patterns
+
+Job pattern is defined by two primary attributes of a job: the number of job completions and the number of Pods to run in parallel. 
+In the case of the "run once until completion" pattern, the `completions` and `parallelism` parameters are set to `1`.
+
+![Job pattern](<Images/Job Patterns.png>)
+
+#### One Shot
+
+Way to run a single Pod once until successful termination. 
+
+Work involved in pulling this off.
+
+1. A pod must be created and submitted to the Kubernetes API. This is done using a Pod template defined in the job configuration.
+
+2. Once a job is up and runnning the Pod backing the job must be monitored for successful termination.
+
+3. A job can fail for any number reasons, including a application error, an uncaught exception during runtime, or a node failure before the job has a chance to complete.
+
+4. In all cases, the job controller is responsible for re-creating the Pod until a successful temination occurs.
+
+job-oneshot.yaml
+```bash
+ apiVersion: batch/v1
+ kind: Job
+ metadata:
+  name: oneshot
+ spec:
+  template:
+    spec:
+      containers:
+      - name: kuard
+        image: gcr.io/kuar-demo/kuard-amd64:blue
+        imagePullPolicy: Always
+        command:
+        - "/kuard"
+        args:
+        - "--keygen-enable"
+        - "--keygen-exit-on-complete"
+        - "--keygen-num-to-gen=10"
+      restartPolicy: OnFailure
+```
+
+```bash
+lijoz@LijosPC MINGW64 /d/My_projects/k8s_study/yamlfiles/12Jobs (main)
+$ kubectl apply -f job-oneshot.yaml
+job.batch/oneshot created
+
+lijoz@LijosPC MINGW64 /d/My_projects/k8s_study/yamlfiles/12Jobs (main)
+$ kubectl describe jobs oneshot
+Name:             oneshot
+Namespace:        default
+Selector:         batch.kubernetes.io/controller-uid=6346894d-edad-4b65-b454-890bb3c41d13
+Labels:           batch.kubernetes.io/controller-uid=6346894d-edad-4b65-b454-890bb3c41d13
+                  batch.kubernetes.io/job-name=oneshot
+                  controller-uid=6346894d-edad-4b65-b454-890bb3c41d13
+                  job-name=oneshot
+Annotations:      <none>
+Parallelism:      1
+Completions:      1
+Completion Mode:  NonIndexed
+Start Time:       Fri, 08 Nov 2024 20:00:13 +0530
+Pods Statuses:    1 Active (1 Ready) / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  batch.kubernetes.io/controller-uid=6346894d-edad-4b65-b454-890bb3c41d13
+           batch.kubernetes.io/job-name=oneshot
+           controller-uid=6346894d-edad-4b65-b454-890bb3c41d13
+           job-name=oneshot
+  Containers:
+   kuard:
+    Image:      gcr.io/kuar-demo/kuard-amd64:blue
+    Port:       <none>
+    Host Port:  <none>
+    Command:
+      /kuard
+    Args:
+      --keygen-enable
+      --keygen-exit-on-complete
+      --keygen-num-to-gen=10
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age   From            Message
+  ----    ------            ----  ----            -------
+  Normal  SuccessfulCreate  13s   job-controller  Created pod: oneshot-ndbh8
+```
