@@ -1752,10 +1752,14 @@ job-oneshot.yaml
 
 ```bash
 lijoz@LijosPC MINGW64 /d/My_projects/k8s_study/yamlfiles/12Jobs (main)
+
+
 $ kubectl apply -f job-oneshot.yaml
 job.batch/oneshot created
 
 lijoz@LijosPC MINGW64 /d/My_projects/k8s_study/yamlfiles/12Jobs (main)
+
+
 $ kubectl describe jobs oneshot
 Name:             oneshot
 Namespace:        default
@@ -1793,4 +1797,56 @@ Events:
   Type    Reason            Age   From            Message
   ----    ------            ----  ----            -------
   Normal  SuccessfulCreate  13s   job-controller  Created pod: oneshot-ndbh8
+
+
+
+$ kubectl logs oneshot-ndbh8 
+2024/11/08 14:30:16 Starting kuard version: v0.10.0-blue
+2024/11/08 14:30:16 **********************************************************************
+2024/11/08 14:30:16 * WARNING: This server may expose sensitive
+2024/11/08 14:30:16 * and secret information. Be careful.
+2024/11/08 14:30:16 **********************************************************************
+2024/11/08 14:30:16 Config:
+{
+  "address": ":8080",
+  "debug": false,
+  "debug-sitedata-dir": "./sitedata",
+  "keygen": {
+    "enable": true,
+    "exit-code": 0,
+    "exit-on-complete": true,
+    "memq-queue": "",
+    "memq-server": "",
+    "num-to-gen": 10,
+    "time-to-run": 0
+  },
+  "liveness": {
+    "fail-next": 0
+  },
+  "readiness": {
+    "fail-next": 0
+  },
+  "tls-address": ":8443",
+  "tls-dir": "/tls"
+}
+2024/11/08 14:30:16 Could not find certificates to serve TLS
+2024/11/08 14:30:16 Serving on HTTP on :8080
+2024/11/08 14:30:16 (ID 0) Workload starting
+2024/11/08 14:30:18 (ID 0 1/10) Item done: SHA256:o0q8ziaFYXWUEKcb1g7kLZRgJVIj6N8VNIL+iXP5hH0
+2024/11/08 14:30:20 (ID 0 2/10) Item done: SHA256:Ju5H9cahLhgg2n+AhbjAm3lbdqgJj7zyICls2TJ5+NY
+2024/11/08 14:30:22 (ID 0 3/10) Item done: SHA256:pQpbQibmWFJmwdnUB7av5C7HAh8mJ/g0rQ9Fbzlwafs
+2024/11/08 14:30:25 (ID 0 4/10) Item done: SHA256:hmv6qvWiNQkJGRsFU2eY75K9owVZmQc0AHSr47QUinU
+2024/11/08 14:30:27 (ID 0 5/10) Item done: SHA256:c9FW0FBgV6YoRJWr8yb1Q/bAU3+1KvqfmOb9wVfMEP8
+2024/11/08 14:30:29 (ID 0 6/10) Item done: SHA256:LxUS1xMtJIlogghsrDqLXZOWFyyWkemp+bYNfywPze4
+2024/11/08 14:30:30 (ID 0 7/10) Item done: SHA256:hy51OYLn3r1p7AnHztDGB053lnc0/RPszeN2RHcAwys
+2024/11/08 14:30:31 (ID 0 8/10) Item done: SHA256:X1j7mH1kHHFote3a/wkRoHlzUjt0Wsma9ruf9BWcdqY
+2024/11/08 14:30:33 (ID 0 9/10) Item done: SHA256:gArJjZA4EGLOT4p+fQVvEpKneoK+gXwxpIqww3fiBBY
+2024/11/08 14:30:35 (ID 0 10/10) Item done: SHA256:4K0/tXzAOc7AFkukjX9ZweWxBeRW7BRcprHzRL66Kfg
+2024/11/08 14:30:35 (ID 0) Workload exiting
 ```
+
+For other resources
+
+#### Parallelism
+
+Generating Keys can be slow. Let's start a bunch of workers together to make key generation faster.git 
